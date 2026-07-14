@@ -2,6 +2,21 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-07-14
+
+### 新增
+
+- **密码可选**：新增 `require_password` 配置项与托盘「开启密码」勾选项
+  - 未启用（默认）：按 **回车** 或 **再次按解锁快捷键** 即可解锁，无需密码
+  - 启用：需输入正确密码 + 回车
+- 「再按快捷键解锁」带防抖（arming），避免触发锁定那次按键的自动重复立即解锁
+
+### 变更
+
+- **移除 `ciqtek` 兜底密码**；默认密码为空、默认无需密码
+- 发布说明下载表格补齐 **压缩包（zip）** 下载角标（原先只有 exe）
+- 同步更新 README 与设计文档的解锁逻辑说明
+
 ## [1.0.1] - 2026-07-14
 
 ### 变更
@@ -30,5 +45,6 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.1.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.0
 [1.0.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.0

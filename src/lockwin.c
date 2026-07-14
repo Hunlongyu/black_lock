@@ -81,7 +81,7 @@ static LRESULT CALLBACK LockProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg)
     {
     case WM_APP_ENTER:
-        if (bl_keyhook_check_password())
+        if (bl_keyhook_should_unlock())
         {
             bl_keyhook_clear();
             bl_lock_exit();

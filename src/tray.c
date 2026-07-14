@@ -25,7 +25,7 @@ void bl_tray_remove(void)
     Shell_NotifyIconW(NIM_DELETE, &g_nid);
 }
 
-int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL pauseChecked)
+int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL requirePwChecked, BOOL pauseChecked)
 {
     HMENU menu = CreatePopupMenu();
     if (!menu)
@@ -36,6 +36,7 @@ int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL pauseChecked)
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
 
     AppendMenuW(menu, MF_STRING | (autostartChecked ? MF_CHECKED : 0), IDM_AUTOSTART, L"开机自启");
+    AppendMenuW(menu, MF_STRING | (requirePwChecked ? MF_CHECKED : 0), IDM_REQUIRE_PW, L"开启密码");
     AppendMenuW(menu, MF_STRING | (pauseChecked ? MF_CHECKED : 0), IDM_PAUSE, L"暂停");
     AppendMenuW(menu, MF_STRING, IDM_CONFIG, L"配置");
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);

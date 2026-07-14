@@ -67,15 +67,16 @@ jobs:
           BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
+          VER="${GITHUB_REF_NAME#v}"
           {
             echo '## 下载'
             echo
-            echo '| 架构 | 直接下载 | 适用系统 |'
-            echo '|:---:|:---:|:---|'
-            echo "| **x64** | [![x64](https://img.shields.io/badge/⬇_BlackLock--x64.exe-2C7BE5?style=for-the-badge&logo=windows)](${BASE}/BlackLock-x64.exe) | 64 位 Windows 10/11（推荐） |"
-            echo "| **x86** | [![x86](https://img.shields.io/badge/⬇_BlackLock--x86.exe-6C757D?style=for-the-badge&logo=windows)](${BASE}/BlackLock-x86.exe) | 32 位 Windows |"
+            echo '| 架构 | 下载 | 适用系统 |'
+            echo '|:---:|:---|:---|'
+            echo "| **x64** | [![exe x64](https://img.shields.io/badge/exe-x64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-x64.exe) [![zip x64](https://img.shields.io/badge/zip-x64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-v${VER}-win64.zip) | 64 位 Windows 10/11（推荐） |"
+            echo "| **x86** | [![exe x86](https://img.shields.io/badge/exe-x86-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-x86.exe) [![zip x86](https://img.shields.io/badge/zip-x86-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-v${VER}-win32.zip) | 32 位 Windows |"
             echo
-            echo '单文件 exe，下载即用（默认快捷键 `Alt + L`，默认密码 `ciqtek`）。含默认配置的压缩包见下方 **Assets**。'
+            echo '`exe` 单文件下载即用；`zip` 内含默认 `config.ini`。默认快捷键 `Alt + L`，默认无需密码（回车或再按一次快捷键即可解锁）。'
             echo
             echo '## 更新内容'
             echo

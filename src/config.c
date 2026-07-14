@@ -170,6 +170,9 @@ static void parseIni(char *text, BlConfig *cfg)
                 else if (_stricmp(key, "autostart") == 0)
                     cfg->autostart =
                         (_stricmp(val, "true") == 0 || _stricmp(val, "1") == 0) ? TRUE : FALSE;
+                else if (_stricmp(key, "require_password") == 0)
+                    cfg->require_password =
+                        (_stricmp(val, "true") == 0 || _stricmp(val, "1") == 0) ? TRUE : FALSE;
             }
         }
         line = next;
@@ -182,9 +185,10 @@ BOOL bl_config_load(BlConfig *cfg)
 {
     // 默认值 (配置文件缺失/键缺失时的回退)
     wcscpy_s(cfg->hotkey, BL_HOTKEY_MAX, L"Alt+L");
-    wcscpy_s(cfg->password, BL_PW_MAX, L"ciqtek");
-    cfg->autostart = FALSE;
-    cfg->path[0]   = 0;
+    cfg->password[0]       = 0;     // 默认空密码 (简单锁屏, 回车即解锁)
+    cfg->autostart         = FALSE;
+    cfg->require_password  = FALSE;
+    cfg->path[0]           = 0;
 
     wchar_t exeCfg[MAX_PATH], appCfg[MAX_PATH];
     pathExeConfig(exeCfg, MAX_PATH);
@@ -219,7 +223,7 @@ BOOL bl_config_load(BlConfig *cfg)
     return TRUE;
 }
 
-BOOL bl_config_save_autostart(const BlConfig *cfg)
+BOOL bl_config_save_bool(const BlConfig *cfg, const char *key, BOOL value)
 {
     if (cfg->path[0] == 0)
         return FALSE;
@@ -229,10 +233,10 @@ BOOL bl_config_save_autostart(const BlConfig *cfg)
     if (!text)
         return FALSE;
 
-    const char *newVal = cfg->autostart ? "true" : "false";
+    const char *newVal = value ? "true" : "false";
 
-    // 输出缓冲: 逐行拷贝, 命中 autostart 键则替换其值行
-    size_t cap = flen + 64;
+    // 输出缓冲: 逐行拷贝, 命中目标键则替换其值行
+    size_t cap = flen + 128;
     char *out  = (char *)malloc(cap);
     if (!out)
     {
@@ -275,7 +279,7 @@ BOOL bl_config_save_autostart(const BlConfig *cfg)
                 lstrcpynA(keybuf, p, sizeof(keybuf)); // 截断安全拷贝 (Win32)
                 rtrim(keybuf);
                 *eq = tmp;
-                if (_stricmp(keybuf, "autostart") == 0)
+                if (_stricmp(keybuf, key) == 0)
                     isKey = TRUE;
             }
         }
@@ -283,7 +287,7 @@ BOOL bl_config_save_autostart(const BlConfig *cfg)
 
         if (isKey)
         {
-            int w = snprintf(out + olen, cap - olen, "autostart = %s", newVal);
+            int w = snprintf(out + olen, cap - olen, "%s = %s", key, newVal);
             if (w > 0)
                 olen += (size_t)w;
             replaced = TRUE;
@@ -314,10 +318,10 @@ BOOL bl_config_save_autostart(const BlConfig *cfg)
         line = next;
     }
 
-    // 文件里没有 autostart 键 -> 追加一行
+    // 文件里没有该键 -> 追加一行
     if (!replaced)
     {
-        int w = snprintf(out + olen, cap - olen, "autostart = %s\r\n", newVal);
+        int w = snprintf(out + olen, cap - olen, "%s = %s\r\n", key, newVal);
         if (w > 0)
             olen += (size_t)w;
     }

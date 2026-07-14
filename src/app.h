@@ -37,6 +37,7 @@
 #define IDM_PAUSE 1002
 #define IDM_CONFIG 1003
 #define IDM_EXIT 1004
+#define IDM_REQUIRE_PW 1005
 
 // 点击版本项打开的发布页
 #define BL_RELEASES_URL L"https://github.com/Hunlongyu/black_lock/releases"

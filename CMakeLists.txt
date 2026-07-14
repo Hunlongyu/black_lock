@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 
 project(BlackLock
-    VERSION 1.0.1
+    VERSION 1.1.0
     DESCRIPTION "无界面黑屏锁屏工具 - Windows 10/11 x64"
     LANGUAGES C
 )

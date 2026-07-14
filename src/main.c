@@ -22,8 +22,20 @@ static BlConfig g_cfg;
 static BOOL g_paused   = FALSE;
 static HWND g_mainHwnd = NULL;
 
-// 重新加载配置并即时应用: 密码 / 开机自启 / 快捷键。
-// 供启动、快捷键触发前、以及配置文件热重载调用。
+// 把当前配置推送给键盘钩子: 密码 / 是否需要密码 / 解锁快捷键。
+static void syncKeyhookFromConfig(void)
+{
+    bl_keyhook_set_password(g_cfg.password);
+    bl_keyhook_set_require_password(g_cfg.require_password);
+    UINT mods = 0, vk = 0;
+    if (bl_hotkey_parse(g_cfg.hotkey, &mods, &vk))
+        bl_keyhook_set_hotkey(mods, vk);
+    else
+        bl_keyhook_set_hotkey(0, 0);
+}
+
+// 重新加载配置并即时应用: 密码 / 是否需要密码 / 开机自启 / 快捷键。
+// 供启动、以及配置文件热重载调用。
 static void applyConfig(HWND hwnd)
 {
     // 若配置文件此刻不存在 (编辑器保存的瞬间可能短暂删除重建), 跳过本次,
@@ -36,8 +48,8 @@ static void applyConfig(HWND hwnd)
         return;
     g_cfg = tmp;
 
-    // 密码即时生效
-    bl_keyhook_set_password(g_cfg.password);
+    // 密码 / 是否需要密码 / 快捷键 即时生效
+    syncKeyhookFromConfig();
 
     // 开机自启与配置保持一致 (幂等; 手改配置文件也能同步注册表)
     bl_autostart_sync(g_cfg.autostart);
@@ -61,7 +73,13 @@ static void onMenuCommand(HWND hwnd, int cmd)
     case IDM_AUTOSTART:
         g_cfg.autostart = !g_cfg.autostart;
         bl_autostart_sync(g_cfg.autostart);
-        bl_config_save_autostart(&g_cfg);
+        bl_config_save_bool(&g_cfg, "autostart", g_cfg.autostart);
+        break;
+
+    case IDM_REQUIRE_PW:
+        g_cfg.require_password = !g_cfg.require_password;
+        bl_keyhook_set_require_password(g_cfg.require_password);
+        bl_config_save_bool(&g_cfg, "require_password", g_cfg.require_password);
         break;
 
     case IDM_PAUSE:
@@ -95,7 +113,7 @@ static LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // 右键或菜单键 -> 弹出上下文菜单
         if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU)
         {
-            int cmd = bl_tray_track_menu(hwnd, g_cfg.autostart, g_paused);
+            int cmd = bl_tray_track_menu(hwnd, g_cfg.autostart, g_cfg.require_password, g_paused);
             if (cmd)
                 onMenuCommand(hwnd, cmd);
         }
@@ -146,8 +164,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow)
     // --- 同步开机自启 ---
     bl_autostart_sync(g_cfg.autostart);
 
-    // --- 初始密码 ---
-    bl_keyhook_set_password(g_cfg.password);
+    // --- 初始: 密码 / 是否需要密码 / 解锁快捷键 ---
+    syncKeyhookFromConfig();
 
     // --- 创建隐藏主窗口 (承载热键与托盘回调, 永不显示) ---
     WNDCLASSW wc     = {0};

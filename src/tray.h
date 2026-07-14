@@ -12,8 +12,8 @@ BOOL bl_tray_add(HWND hwnd, HICON icon);
 // 移除托盘图标。
 void bl_tray_remove(void);
 
-// 弹出右键菜单 (开机自启 / 暂停 / 配置 / 退出), 返回选中的 IDM_* (未选返回 0)。
-// autostartChecked / pauseChecked 控制两个勾选项的勾选态。
-int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL pauseChecked);
+// 弹出右键菜单, 返回选中的 IDM_* (未选返回 0)。
+// autostartChecked / requirePwChecked / pauseChecked 控制勾选项的勾选态。
+int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL requirePwChecked, BOOL pauseChecked);
 
 #endif // BLACKLOCK_TRAY_H
