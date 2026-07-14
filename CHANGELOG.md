@@ -2,6 +2,14 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-07-14
+
+### 变更
+
+- 托盘右键菜单的版本号项改为**可点击**，点击直接打开 GitHub 发布页
+- 发布说明新增**下载角标表格**（x64 / x86 一键直达下载）
+- GitHub Actions 发布 x64 与 x86 两个架构
+
 ## [1.0.0] - 2026-07-14
 
 首个正式版本。
@@ -22,4 +30,5 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.0.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.0

@@ -61,13 +61,35 @@ jobs:
         with:
           path: artifacts # 各架构落到 artifacts/blacklock-<arch>/
 
+      - name: Build release notes (含下载角标)
+        shell: bash
+        env:
+          BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo '## 下载'
+            echo
+            echo '| 架构 | 直接下载 | 适用系统 |'
+            echo '|:---:|:---:|:---|'
+            echo "| **x64** | [![x64](https://img.shields.io/badge/⬇_BlackLock--x64.exe-2C7BE5?style=for-the-badge&logo=windows)](${BASE}/BlackLock-x64.exe) | 64 位 Windows 10/11（推荐） |"
+            echo "| **x86** | [![x86](https://img.shields.io/badge/⬇_BlackLock--x86.exe-6C757D?style=for-the-badge&logo=windows)](${BASE}/BlackLock-x86.exe) | 32 位 Windows |"
+            echo
+            echo '单文件 exe，下载即用（默认快捷键 `Alt + L`，默认密码 `ciqtek`）。含默认配置的压缩包见下方 **Assets**。'
+            echo
+            echo '## 更新内容'
+            echo
+            echo "详见 [CHANGELOG.md](https://github.com/${REPO}/blob/main/CHANGELOG.md)。"
+          } > NOTES.md
+          cat NOTES.md
+
       - name: Publish to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        # 若 Release 已存在则改为上传/覆盖附件
+        # 若 Release 已存在则改为更新说明并上传/覆盖附件
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "BlackLock $GITHUB_REF_NAME" --generate-notes \
+            --title "BlackLock $GITHUB_REF_NAME" --notes-file NOTES.md \
             artifacts/*/* \
-          || gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            artifacts/*/* --clobber
+          || { gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file NOTES.md; \
+               gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" artifacts/*/* --clobber; }

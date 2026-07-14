@@ -32,10 +32,14 @@
 #define BL_TIMER_TOP 1  // 保持置顶定时器
 
 // 托盘右键菜单命令 ID
+#define IDM_RELEASES 1000
 #define IDM_AUTOSTART 1001
 #define IDM_PAUSE 1002
 #define IDM_CONFIG 1003
 #define IDM_EXIT 1004
+
+// 点击版本项打开的发布页
+#define BL_RELEASES_URL L"https://github.com/Hunlongyu/black_lock/releases"
 
 // 密码 / 配置缓冲上限
 #define BL_PW_MAX 256

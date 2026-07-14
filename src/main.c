@@ -7,6 +7,7 @@
 // 逃生口: Ctrl+Alt+Del 属内核级序列, 用户态无法拦截; 忘记密码可经任务管理器结束进程。
 // clang-format off
 #include <windows.h>
+#include <shellapi.h>
 // clang-format on
 #include <wchar.h>
 #include "app.h"
@@ -53,6 +54,10 @@ static void onMenuCommand(HWND hwnd, int cmd)
 {
     switch (cmd)
     {
+    case IDM_RELEASES:
+        ShellExecuteW(NULL, L"open", BL_RELEASES_URL, NULL, NULL, SW_SHOWNORMAL);
+        break;
+
     case IDM_AUTOSTART:
         g_cfg.autostart = !g_cfg.autostart;
         bl_autostart_sync(g_cfg.autostart);

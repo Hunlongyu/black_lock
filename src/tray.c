@@ -31,8 +31,8 @@ int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL pauseChecked)
     if (!menu)
         return 0;
 
-    // 版本号 (置灰、不可点击)
-    AppendMenuW(menu, MF_STRING | MF_GRAYED | MF_DISABLED, 0, L"BlackLock v" BL_VERSION_W);
+    // 版本号 (可点击 -> 打开 GitHub 发布页)
+    AppendMenuW(menu, MF_STRING, IDM_RELEASES, L"BlackLock v" BL_VERSION_W);
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
 
     AppendMenuW(menu, MF_STRING | (autostartChecked ? MF_CHECKED : 0), IDM_AUTOSTART, L"开机自启");
