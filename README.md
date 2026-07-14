@@ -6,7 +6,7 @@
 
 一键真黑屏锁住屏幕（而非息屏），输入密码解锁；锁定期间不睡眠、动鼠标不解锁。
 
-![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D6)
+![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20(x64%20%C2%B7%20x86)-0078D6)
 ![language](https://img.shields.io/badge/language-C17-00599C)
 ![build](https://img.shields.io/badge/build-MSVC-8250DF)
 ![size](https://img.shields.io/badge/size-~28.5%20KB-brightgreen)
@@ -105,6 +105,15 @@ cmake --build --preset msvc-minsize # 构建体积最小版
 ```
 
 产物输出到 `dist\BlackLock.exe`，同时在 `dist\` 生成一份默认 `config.ini`。
+
+**32 位 (x86) 构建**：
+
+```powershell
+cmake --preset msvc-x86
+cmake --build --preset msvc-x86-minsize
+```
+
+> 注意：x64 与 x86 共用输出目录 `dist\`，本地一次只保留最后构建的那个架构；发布时由 GitHub Actions 分别产出。
 
 其它配置：`cmake --build --preset msvc-release` / `msvc-debug`。
 

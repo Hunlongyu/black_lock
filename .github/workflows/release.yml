@@ -1,6 +1,6 @@
 name: Release
 
-# 推送形如 v1.0.0 的标签时: 编译 Release 版并上传到对应的 GitHub Release。
+# 推送形如 v1.0.0 的标签时: 编译 x64 与 x86 两个 Release 版, 上传到对应的 GitHub Release。
 on:
   push:
     tags:
@@ -10,41 +10,64 @@ permissions:
   contents: write # 允许创建 Release / 上传附件
 
 jobs:
-  build-release:
+  build:
     runs-on: windows-latest # 自带 CMake 与 Visual Studio (MSVC)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            cmake_arch: x64
+            label: win64
+          - arch: x86
+            cmake_arch: Win32
+            label: win32
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Derive version from tag
         id: ver
         shell: bash
-        # v1.2.3 -> 1.2.3
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT" # v1.2.3 -> 1.2.3
 
-      - name: Configure (MSVC, 版本号取自标签)
-        # 不指定 -G, 使用运行器上默认的 Visual Studio 生成器 (跨 VS 版本稳健)
-        run: cmake -S . -B build -A x64 -DBL_VERSION_OVERRIDE=${{ steps.ver.outputs.version }}
+      - name: Configure (MSVC ${{ matrix.arch }}, 版本号取自标签)
+        run: cmake -S . -B build -A ${{ matrix.cmake_arch }} -DBL_VERSION_OVERRIDE=${{ steps.ver.outputs.version }}
 
       - name: Build (MinSizeRel)
         run: cmake --build build --config MinSizeRel
 
-      - name: Package zip (exe + 默认配置)
+      - name: Package (${{ matrix.arch }})
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item dist/BlackLock.exe "out/BlackLock-${{ matrix.arch }}.exe"
           Compress-Archive -Path dist/BlackLock.exe, dist/config.ini `
-            -DestinationPath "BlackLock-v$ver-win64.zip" -Force
+            -DestinationPath "out/BlackLock-v$ver-${{ matrix.label }}.zip" -Force
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: blacklock-${{ matrix.arch }}
+          path: out/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts # 各架构落到 artifacts/blacklock-<arch>/
 
       - name: Publish to GitHub Release
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        # 若 Release 已存在(例如先在网页建了)则改为上传/覆盖附件
+        # 若 Release 已存在则改为上传/覆盖附件
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "BlackLock $GITHUB_REF_NAME" \
-            --generate-notes \
-            dist/BlackLock.exe BlackLock-v*.zip \
-          || gh release upload "$GITHUB_REF_NAME" \
-            dist/BlackLock.exe BlackLock-v*.zip --clobber
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "BlackLock $GITHUB_REF_NAME" --generate-notes \
+            artifacts/*/* \
+          || gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            artifacts/*/* --clobber
