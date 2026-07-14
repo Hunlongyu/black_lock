@@ -1,0 +1,17 @@
+# 默认: 文本按 LF 存入仓库, 检出时由 core.autocrlf 决定 (Windows 上为 CRLF)
+* text=auto
+
+# Windows 资源脚本用 CRLF
+*.rc text eol=crlf
+
+# 默认配置模板: 内嵌为 exe 资源并拷到 dist, 保持 CRLF 以生成 Windows 友好的 config.ini
+config.default.ini text eol=crlf
+
+# 二进制文件, 不做换行/文本处理
+*.ico binary
+*.exe binary
+*.png binary
+*.zip binary
+
+# 语言归类 (GitHub Linguist): 文档不计入语言统计
+docs/** linguist-documentation
