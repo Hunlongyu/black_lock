@@ -1,0 +1,50 @@
+name: Release
+
+# 推送形如 v1.0.0 的标签时: 编译 Release 版并上传到对应的 GitHub Release。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # 允许创建 Release / 上传附件
+
+jobs:
+  build-release:
+    runs-on: windows-latest # 自带 CMake 与 Visual Studio (MSVC)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        # v1.2.3 -> 1.2.3
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure (MSVC, 版本号取自标签)
+        # 不指定 -G, 使用运行器上默认的 Visual Studio 生成器 (跨 VS 版本稳健)
+        run: cmake -S . -B build -A x64 -DBL_VERSION_OVERRIDE=${{ steps.ver.outputs.version }}
+
+      - name: Build (MinSizeRel)
+        run: cmake --build build --config MinSizeRel
+
+      - name: Package zip (exe + 默认配置)
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          Compress-Archive -Path dist/BlackLock.exe, dist/config.ini `
+            -DestinationPath "BlackLock-v$ver-win64.zip" -Force
+
+      - name: Publish to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # 若 Release 已存在(例如先在网页建了)则改为上传/覆盖附件
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "BlackLock $GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/BlackLock.exe BlackLock-v*.zip \
+          || gh release upload "$GITHUB_REF_NAME" \
+            dist/BlackLock.exe BlackLock-v*.zip --clobber

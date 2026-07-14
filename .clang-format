@@ -1,0 +1,40 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+# 指针靠近类型名: BOOL *p  ->  BOOL *p (右结合)
+PointerAlignment: Right
+
+# 大括号: Attach (K&R), Allman (另起行), Microsoft (函数另起行, 控制流 Attach)
+BreakBeforeBraces: Allman
+
+# 短函数/if 不压缩到一行
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
+
+# 对齐
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignConsecutiveDeclarations:
+  Enabled: false
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 1
+
+# include 排序
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# 空行控制
+MaxEmptyLinesToKeep: 1
+EmptyLineBeforeAccessModifier: Never
+
+# 其它
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInCStyleCastParentheses: false

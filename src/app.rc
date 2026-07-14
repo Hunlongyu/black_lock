@@ -1,0 +1,48 @@
+// app.rc —— 图标与版本信息
+#include <windows.h>
+
+// 本文件以 UTF-8 保存, 告知 rc.exe 按 UTF-8 解析 (否则中文按系统码页误读)
+#pragma code_page(65001)
+
+// 应用图标 (ID 1, 与 main.c 中 MAKEINTRESOURCEW(1) 对应)
+1 ICON "app.ico"
+
+// 默认配置模板 (单一事实来源: src/config.default.ini)。
+// 运行时若无有效配置, 取此资源字节写入 %APPDATA%\BlackLock\config.ini。
+BL_DEFAULT_CONFIG RCDATA "config.default.ini"
+
+// 版本号由 CMake 注入 (BL_VER_* / BL_VERSION); 与托盘菜单、可执行文件属性一致。
+#ifndef BL_VER_MAJOR
+#define BL_VER_MAJOR 0
+#define BL_VER_MINOR 0
+#define BL_VER_PATCH 0
+#endif
+#ifndef BL_VERSION
+#define BL_VERSION "0.0.0"
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION BL_VER_MAJOR, BL_VER_MINOR, BL_VER_PATCH, 0
+PRODUCTVERSION BL_VER_MAJOR, BL_VER_MINOR, BL_VER_PATCH, 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0" // 中文(简体) + Unicode
+        BEGIN
+            VALUE "CompanyName", "Hunlongyu"
+            VALUE "FileDescription", "BlackLock"
+            VALUE "FileVersion", BL_VERSION
+            VALUE "InternalName", "BlackLock"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Hunlongyu. MIT License."
+            VALUE "OriginalFilename", "BlackLock.exe"
+            VALUE "ProductName", "BlackLock"
+            VALUE "ProductVersion", BL_VERSION
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

@@ -1,0 +1,44 @@
+# CMake 构建目录
+build/
+build-*/
+cmake-build-*/
+out/
+
+# CMake 缓存与生成文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_CPack_Packages/
+
+# 编译产物
+dist/
+*.exe
+*.obj
+*.o
+*.ilk
+*.pdb
+*.exp
+*.lib
+*.a
+
+# 运行期生成的配置
+config.ini
+
+# Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# CLion / JetBrains
+.idea/
+
+# VS Code
+.vscode/
+
+# Windows 系统文件
+Thumbs.db
+Desktop.ini
