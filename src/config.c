@@ -179,6 +179,58 @@ static void parseIni(char *text, BlConfig *cfg)
     }
 }
 
+/* ---------- 老配置升级 (缺键自动补齐) ---------- */
+
+// 追加内容到已存在文件末尾。成功返回 TRUE。
+static BOOL appendFile(const wchar_t *path, const char *data, DWORD len)
+{
+    HANDLE h = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return FALSE;
+    SetFilePointer(h, 0, NULL, FILE_END);
+    DWORD wrote = 0;
+    BOOL ok     = WriteFile(h, data, len, &wrote, NULL);
+    CloseHandle(h);
+    return ok && wrote == len;
+}
+
+// 文本中是否存在某个键 (忽略注释行, 大小写不敏感)。
+static BOOL iniHasKey(const char *text, const char *key)
+{
+    const char *line = text;
+    while (line && *line)
+    {
+        const char *nl = strpbrk(line, "\r\n");
+        const char *p  = line;
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (*p && *p != ';' && *p != '#' && *p != '[')
+        {
+            const char *eq = strchr(p, '=');
+            if (eq && (!nl || eq < nl))
+            {
+                char keybuf[64];
+                int n = 0;
+                const char *q = p;
+                while (q < eq && n < 63)
+                    keybuf[n++] = *q++;
+                keybuf[n] = 0;
+                while (n > 0 && (keybuf[n - 1] == ' ' || keybuf[n - 1] == '\t'))
+                    keybuf[--n] = 0;
+                if (_stricmp(keybuf, key) == 0)
+                    return TRUE;
+            }
+        }
+        if (!nl)
+            break;
+        line = nl;
+        while (*line == '\r' || *line == '\n')
+            line++;
+    }
+    return FALSE;
+}
+
 /* ---------- 对外接口 ---------- */
 
 BOOL bl_config_load(BlConfig *cfg)
@@ -218,7 +270,24 @@ BOOL bl_config_load(BlConfig *cfg)
     char *text  = readFileAll(cfg->path, &flen);
     if (!text)
         return FALSE;
+    // 注意: parseIni 会就地破坏 text (把 '=' 与换行替换为 '\0'),
+    // 因此升级检测必须在解析之前、对原始文本进行。
+    BOOL needMigrate = !iniHasKey(text, "require_password");
+
     parseIni(text, cfg);
+
+    // 老配置升级: 若缺 require_password 键 (v1.1 新增), 自动补一段带注释的配置,
+    // 让升级用户能在配置文件里看到并修改"开启密码"开关。
+    if (needMigrate)
+    {
+        static const char *blk =
+            "\r\n; 是否需要密码解锁 (v1.1 新增)。也可在托盘菜单勾选\"开启密码\"切换。\r\n"
+            ";   false = 简单锁屏: 按回车或再次按解锁快捷键即可解锁 (无需密码)\r\n"
+            ";   true  = 需输入上面的 password + 回车 才能解锁\r\n"
+            "require_password = false\r\n";
+        appendFile(cfg->path, blk, (DWORD)strlen(blk));
+    }
+
     free(text);
     return TRUE;
 }

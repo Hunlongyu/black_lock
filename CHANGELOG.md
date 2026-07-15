@@ -2,6 +2,13 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-07-15
+
+### 修复
+
+- 托盘右键菜单的勾选状态（开机自启 / 开启密码 / 暂停）现在每次打开菜单都重新读取配置文件，确保与磁盘上的配置**实时一致**（此前在文件监视偶尔漏掉变更时，勾选态可能滞后）
+- **老配置自动升级**：从 v1.0.x 升级时，旧 `config.ini` 缺少 `require_password` 键，工具会在加载时自动补上带注释的该配置项（此前升级用户在配置文件里找不到"开启密码"开关）
+
 ## [1.1.0] - 2026-07-14
 
 ### 新增
@@ -45,6 +52,7 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.1.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.0
 [1.0.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.0

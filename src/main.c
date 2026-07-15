@@ -113,6 +113,9 @@ static LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // 右键或菜单键 -> 弹出上下文菜单
         if (LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU)
         {
+            // 弹菜单前重新读取配置, 确保勾选态与磁盘上的配置文件一致
+            // (即使文件监视因故漏掉某次变更, 菜单也总是最新的)
+            applyConfig(hwnd);
             int cmd = bl_tray_track_menu(hwnd, g_cfg.autostart, g_cfg.require_password, g_paused);
             if (cmd)
                 onMenuCommand(hwnd, cmd);
