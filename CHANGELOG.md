@@ -2,6 +2,12 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2] - 2026-07-15
+
+### 变更
+
+- 托盘图标悬浮提示改为三行：程序名 / 描述 + 快捷键 / 版本号；快捷键随配置实时更新
+
 ## [1.1.1] - 2026-07-15
 
 ### 修复
@@ -52,6 +58,7 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.1.2]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.2
 [1.1.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.0
 [1.0.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.0.1

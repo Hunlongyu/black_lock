@@ -6,8 +6,11 @@
 #include <windows.h>
 // clang-format on
 
-// 添加托盘图标 (回调消息 WM_APP_TRAY)。成功返回 TRUE。
-BOOL bl_tray_add(HWND hwnd, HICON icon);
+// 添加托盘图标 (回调消息 WM_APP_TRAY)。hotkey 用于悬浮提示第二行。成功返回 TRUE。
+BOOL bl_tray_add(HWND hwnd, HICON icon, const wchar_t *hotkey);
+
+// 更新托盘悬浮提示 (快捷键变化时刷新)。
+void bl_tray_update_tip(const wchar_t *hotkey);
 
 // 移除托盘图标。
 void bl_tray_remove(void);

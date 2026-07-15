@@ -54,6 +54,9 @@ static void applyConfig(HWND hwnd)
     // 开机自启与配置保持一致 (幂等; 手改配置文件也能同步注册表)
     bl_autostart_sync(g_cfg.autostart);
 
+    // 悬浮提示里的快捷键随配置更新
+    bl_tray_update_tip(g_cfg.hotkey);
+
     // 快捷键即时生效 (暂停中则保持未注册)
     if (!g_paused)
     {
@@ -199,7 +202,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow)
     HICON icon = LoadIconW(hInst, MAKEINTRESOURCEW(1));
     if (!icon)
         icon = LoadIconW(NULL, IDI_APPLICATION);
-    bl_tray_add(g_mainHwnd, icon);
+    bl_tray_add(g_mainHwnd, icon, g_cfg.hotkey);
 
     // --- 配置热重载: 监视配置文件所在目录, 变更即重载 (密码/快捷键/自启即时生效) ---
     wchar_t watchDir[MAX_PATH];

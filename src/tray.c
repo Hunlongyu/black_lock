@@ -3,12 +3,20 @@
 #include <windows.h>
 #include <shellapi.h>
 // clang-format on
+#include <wchar.h>
 #include "tray.h"
 #include "app.h"
 
 static NOTIFYICONDATAW g_nid = {0};
 
-BOOL bl_tray_add(HWND hwnd, HICON icon)
+// 悬浮提示 (三行): 程序名 / 描述 + 快捷键 / 版本号
+static void buildTip(const wchar_t *hotkey)
+{
+    swprintf(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"BlackLock\n无界面黑屏锁屏工具  (%s)\nv" BL_VERSION_W,
+             (hotkey && *hotkey) ? hotkey : L"Alt+L");
+}
+
+BOOL bl_tray_add(HWND hwnd, HICON icon, const wchar_t *hotkey)
 {
     g_nid.cbSize           = sizeof(g_nid);
     g_nid.hWnd             = hwnd;
@@ -16,8 +24,15 @@ BOOL bl_tray_add(HWND hwnd, HICON icon)
     g_nid.uFlags           = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_APP_TRAY;
     g_nid.hIcon            = icon;
-    wcscpy_s(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"BlackLock — 黑屏锁 (Alt+L)");
+    buildTip(hotkey);
     return Shell_NotifyIconW(NIM_ADD, &g_nid);
+}
+
+void bl_tray_update_tip(const wchar_t *hotkey)
+{
+    buildTip(hotkey);
+    g_nid.uFlags = NIF_TIP;
+    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
 void bl_tray_remove(void)
