@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 
 project(BlackLock
-    VERSION 1.1.2
+    VERSION 1.2.0
     DESCRIPTION "无界面黑屏锁屏工具 - Windows 10/11 x64"
     LANGUAGES C
 )
@@ -78,17 +78,26 @@ add_executable(BlackLock WIN32
 
 target_include_directories(BlackLock PRIVATE src)
 
+# ---- 按架构分目录输出, 避免 x64/x86 互相覆盖 ----
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(BL_ARCH "x64")
+else()
+    set(BL_ARCH "x86")
+endif()
+set(BL_OUTDIR "${CMAKE_SOURCE_DIR}/dist/${BL_ARCH}")
+
 set_target_properties(BlackLock PROPERTIES
     OUTPUT_NAME "BlackLock"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/dist"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/dist"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/dist"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/dist"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/dist")
+    RUNTIME_OUTPUT_DIRECTORY "${BL_OUTDIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BL_OUTDIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BL_OUTDIR}"
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${BL_OUTDIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${BL_OUTDIR}")
 
-# ---- 动态 UCRT (Win10+ 自带, 不额外分发文件) ----
+# ---- 静态 CRT (/MT): 真正零运行时依赖, 不需要 VC++ Redistributable ----
+# 代价: 体积从 ~31KB 增至 ~170KB; 换取干净系统上开箱即用 (见 README 依赖清单)
 set_property(TARGET BlackLock PROPERTY
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # ---- 通用宏 + 版本号 (C 代码与 .rc 资源共用) ----
 target_compile_definitions(BlackLock PRIVATE
@@ -103,8 +112,8 @@ target_compile_options(BlackLock PRIVATE
     /W4 /utf-8 /std:c17
     $<$<CONFIG:Release,MinSizeRel>:/O1>
     $<$<CONFIG:Release,MinSizeRel>:/Os>
-    $<$<CONFIG:Release,MinSizeRel>:/Gy>
-    $<$<CONFIG:Release,MinSizeRel>:/GS->)
+    $<$<CONFIG:Release,MinSizeRel>:/Gy>)
+# 注: 不使用 /GS-。栈保护 (/GS) 保持默认开启, 体积收益极小但能防栈溢出利用。
 
 # ---- 链接选项 (去调试信息 + 合并/裁剪) ----
 target_link_options(BlackLock PRIVATE
@@ -143,4 +152,5 @@ install(TARGETS BlackLock RUNTIME DESTINATION .)
 
 message(STATUS "BlackLock ${BL_VER}")
 message(STATUS "  Compiler : ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
-message(STATUS "  Output   : dist/BlackLock.exe")
+message(STATUS "  Arch     : ${BL_ARCH} (静态 CRT /MT, 零运行时依赖)")
+message(STATUS "  Output   : dist/${BL_ARCH}/BlackLock.exe")

@@ -9,8 +9,8 @@
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20(x64%20%C2%B7%20x86)-0078D6)
 ![language](https://img.shields.io/badge/language-C17-00599C)
 ![build](https://img.shields.io/badge/build-MSVC-8250DF)
-![size](https://img.shields.io/badge/size-~28.5%20KB-brightgreen)
-![deps](https://img.shields.io/badge/third--party%20deps-0-success)
+![size](https://img.shields.io/badge/size-~170%20KB-brightgreen)
+![deps](https://img.shields.io/badge/runtime%20deps-0-success)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -19,7 +19,7 @@
 
 ## 简介
 
-BlackLock 是一个常驻后台的小工具：按下全局快捷键（默认 `Alt + L`）后，用一块覆盖所有显示器的黑色窗口把桌面遮住。默认按回车（或再按一次快捷键）即可解锁；也可开启密码保护。它没有任何窗口和设置界面，全部行为通过一个带注释的配置文件调整，编译产物是**单个约 30 KB 的 exe，零第三方依赖**。
+BlackLock 是一个常驻后台的小工具：按下全局快捷键（默认 `Alt + L`）后，用一块覆盖所有显示器的黑色窗口把桌面遮住。默认按回车（或再按一次快捷键）即可解锁；也可开启密码保护。它没有任何窗口和设置界面，全部行为通过一个带注释的配置文件调整，编译产物是**单个约 170 KB 的 exe，真正零运行时依赖**（静态 CRT，干净系统免装 VC++ 运行库即可运行）。
 
 适用场景：临时离开工位时快速遮屏防窥、午休黑屏而不让电脑睡眠、需要"锁屏但后台任务继续跑"的场合。
 
@@ -36,7 +36,7 @@ BlackLock 是一个常驻后台的小工具：按下全局快捷键（默认 `Al
 - 📌 **系统托盘菜单**：开机自启 / 开启密码 / 暂停 / 配置 / 退出
 - 🧩 **拦截切换热键**：锁定期间吞掉 `Win`、`Alt+Tab`、`Alt+F4`、`Ctrl+Esc` 等
 - 🖥️ **多屏 & 高 DPI**：正确覆盖整个虚拟桌面，分辨率变化 / 热插拔自动重铺
-- 🪶 **极致轻量**：纯 C（C17）+ Win32，单文件 exe，无第三方运行时依赖
+- 🪶 **轻量 & 零依赖**：纯 C（C17）+ Win32，单文件 exe，静态 CRT，仅依赖 Windows 系统 DLL
 
 ## 快速开始
 
@@ -108,7 +108,7 @@ cmake --preset msvc                 # 配置 (Visual Studio 生成器, x64)
 cmake --build --preset msvc-minsize # 构建体积最小版
 ```
 
-产物输出到 `dist\BlackLock.exe`，同时在 `dist\` 生成一份默认 `config.ini`。
+产物输出到 `dist\x64\BlackLock.exe`，同时在同目录生成一份默认 `config.ini`。
 
 **32 位 (x86) 构建**：
 
@@ -117,7 +117,7 @@ cmake --preset msvc-x86
 cmake --build --preset msvc-x86-minsize
 ```
 
-> 注意：x64 与 x86 共用输出目录 `dist\`，本地一次只保留最后构建的那个架构；发布时由 GitHub Actions 分别产出。
+> 两个架构**分目录输出**（`dist\x64\` 与 `dist\x86\`），可同时保留、互不覆盖。
 
 其它配置：`cmake --build --preset msvc-release` / `msvc-debug`。
 
@@ -125,7 +125,7 @@ cmake --build --preset msvc-x86-minsize
 
 ### 依赖清单
 
-无任何第三方运行时依赖，仅链接 Windows 系统库：
+**真正零运行时依赖**：CRT 静态链接（`/MT`），因此**不需要安装 VC++ Redistributable**，干净系统上双击即可运行。exe 只导入 6 个 Windows 系统 DLL：
 
 | 库 | 用途 |
 |----|------|
@@ -134,10 +134,13 @@ cmake --build --preset msvc-x86-minsize
 | `bcrypt` | 密码 SHA-256 |
 | `shell32` | 托盘图标、命令行、打开配置 |
 | `advapi32` | 注册表（开机自启） |
+| `kernel32` | 文件、互斥、内存、电源状态 |
+
+可自行验证：`dumpbin /dependents dist\x64\BlackLock.exe`，输出中不应出现 `VCRUNTIME140.dll` 或 `api-ms-win-crt-*`。
 
 ## 版本与发布
 
-- 版本号在 [CMakeLists.txt](CMakeLists.txt) 的 `project(... VERSION x.y.z)` 定义，会显示在**托盘右键菜单顶部**（置灰不可点击）与 exe 文件属性中。
+- 版本号在 [CMakeLists.txt](CMakeLists.txt) 的 `project(... VERSION x.y.z)` 定义，会显示在**托盘右键菜单顶部**（可点击，打开 GitHub 发布页）与 exe 文件属性中。
 - **自动发布**：推送形如 `v1.2.3` 的 Git 标签，[GitHub Actions](.github/workflows/release.yml) 会自动编译 Release 版并上传 `BlackLock.exe` 与打包 zip 到对应的 GitHub Release。发布版本号取自标签（`-DBL_VERSION_OVERRIDE`），无需改代码。
 
   ```bash
@@ -145,7 +148,7 @@ cmake --build --preset msvc-x86-minsize
   git push origin v1.2.3   # 触发构建与发布
   ```
 
-- **不含在线自动升级**：BlackLock 仅通过 GitHub Release 手动下载更新。工具本身不到 30 KB，重新下载成本极低。
+- **不含在线自动升级**：BlackLock 仅通过 GitHub Release 手动下载更新。工具本身约 170 KB，重新下载成本极低。
 
 ## 常见问题
 

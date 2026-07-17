@@ -35,6 +35,29 @@ void bl_tray_update_tip(const wchar_t *hotkey)
     Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
+// Explorer 重启后任务栏会重建, 原图标已失效, 需要重新 NIM_ADD。
+// g_nid 里已保存 hWnd / uID / 图标 / 提示, 直接复用即可。
+BOOL bl_tray_readd(void)
+{
+    if (!g_nid.hWnd)
+        return FALSE;
+    Shell_NotifyIconW(NIM_DELETE, &g_nid); // 清理可能的残留, 失败可忽略
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    return Shell_NotifyIconW(NIM_ADD, &g_nid);
+}
+
+void bl_tray_notify(const wchar_t *title, const wchar_t *msg)
+{
+    if (!g_nid.hWnd)
+        return;
+    NOTIFYICONDATAW n = g_nid;
+    n.uFlags          = NIF_INFO;
+    n.dwInfoFlags     = NIIF_WARNING;
+    wcsncpy_s(n.szInfoTitle, ARRAYSIZE(n.szInfoTitle), title, _TRUNCATE);
+    wcsncpy_s(n.szInfo, ARRAYSIZE(n.szInfo), msg, _TRUNCATE);
+    Shell_NotifyIconW(NIM_MODIFY, &n);
+}
+
 void bl_tray_remove(void)
 {
     Shell_NotifyIconW(NIM_DELETE, &g_nid);

@@ -2,6 +2,28 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-07-15
+
+本版基于一轮完整代码审查，修复了 1 个安全缺陷与多项健壮性问题。
+
+### 安全
+
+- **修复：超长/无效密码会静默退化为空密码**。`password` 超过缓冲容量（或非法 UTF-8）时，UTF-8→UTF-16 转换失败后被当成空值，配合 `require_password = true` 会导致**空回车即可解锁**。现在转换失败不再静默置空。
+- **禁止无有效密码时启用密码保护**：`require_password = true` 但密码为空/无效时，强制降级为「无需密码」并**弹出托盘气泡告知**，不再给出「已受保护」的错觉；托盘勾选「开启密码」时若密码为空，会拒绝并提示先设置密码。
+
+### 变更
+
+- **改为静态 CRT（`/MT`），真正零运行时依赖**：此前动态 CRT 会导入 `VCRUNTIME140.dll`（属于 VC++ Redistributable，**不是** Windows 自带），干净系统上可能无法启动，与「单文件下载即用」不符。现在 exe 仅导入 6 个 Windows 系统 DLL。代价：体积 ~31 KB → ~172 KB (x64) / ~152 KB (x86)。
+- **x64 / x86 分目录输出**（`dist/x64`、`dist/x86`）：此前共用 `dist/`，先后构建会互相覆盖，可能发布出错误架构的产物。CI 增加 PE Machine 校验。
+- 移除 `/GS-`，恢复默认栈保护（体积收益极小，安全收益明确）。
+
+### 修复
+
+- **Explorer 重启后托盘图标不再永久消失**：处理 `TaskbarCreated` 广播并重建图标（此前图标丢失后无法暂停/配置/退出，且单实例互斥体使其无法重开）。
+- 键盘钩子中 `GetKeyboardState` 未初始化缓冲且未检查返回值，失败时会用栈上残留数据翻译按键；现已零初始化并在失败时跳过。
+- `iniHasKey` 查找 `=` 未限制在当前行，对无等号的行会一路扫到文件尾，构成 O(n²)；现用 `memchr` 限界。
+- 文档漂移修正：版本菜单项描述（可点击）、设计文档状态、测试用例 T-01、体积与依赖声明。
+
 ## [1.1.2] - 2026-07-15
 
 ### 变更
@@ -58,6 +80,7 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.2.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.2.0
 [1.1.2]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.2
 [1.1.1]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.0

@@ -140,8 +140,11 @@ static LRESULT CALLBACK kbProc(int code, WPARAM wParam, LPARAM lParam)
         }
 
         // 4) 其它键 -> 翻译成字符, 存入密码缓冲 (仅密码模式下有意义)
-        BYTE ks[256];
-        GetKeyboardState(ks);
+        // 必须零初始化并检查返回值: 失败时若沿用栈上残留数据, ToUnicode 结果不可预测,
+        // 可能导致密码字符错乱而无法解锁。
+        BYTE ks[256] = {0};
+        if (!GetKeyboardState(ks))
+            return 1; // 取不到键盘状态 -> 只吞键, 不改密码缓冲
         ks[VK_SHIFT]   = shift ? 0x80 : 0;
         ks[VK_CAPITAL] = (GetKeyState(VK_CAPITAL) & 1) ? 1 : 0;
         WCHAR ch[4];

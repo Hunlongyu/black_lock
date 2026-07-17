@@ -14,6 +14,7 @@ typedef struct
     BOOL require_password;           // 解锁是否需要密码 (false: 回车/再次快捷键即解锁)
     wchar_t password[BL_PW_MAX];     // 明文密码 (仅 require_password=true 时生效)
     wchar_t path[MAX_PATH];          // 实际生效的配置文件绝对路径
+    BOOL security_downgraded;        // 配置要求密码但密码为空/无效 -> 已强制降级为无需密码
 } BlConfig;
 
 // 定位 -> (缺失则生成默认) -> 读取, 填充 cfg。成功返回 TRUE。

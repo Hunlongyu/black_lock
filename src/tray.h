@@ -12,6 +12,12 @@ BOOL bl_tray_add(HWND hwnd, HICON icon, const wchar_t *hotkey);
 // 更新托盘悬浮提示 (快捷键变化时刷新)。
 void bl_tray_update_tip(const wchar_t *hotkey);
 
+// 重新添加托盘图标 (用于 Explorer 重启后的 TaskbarCreated 恢复)。
+BOOL bl_tray_readd(void);
+
+// 弹出气泡通知 (用于失败/降级提示)。
+void bl_tray_notify(const wchar_t *title, const wchar_t *msg);
+
 // 移除托盘图标。
 void bl_tray_remove(void);
 

@@ -19,8 +19,26 @@
 #include "tray.h"
 
 static BlConfig g_cfg;
-static BOOL g_paused   = FALSE;
-static HWND g_mainHwnd = NULL;
+static BOOL g_paused          = FALSE;
+static HWND g_mainHwnd        = NULL;
+static UINT g_taskbarCreated  = 0;     // Explorer 重启后任务栏重建的广播消息
+static BOOL g_warnedDowngrade = FALSE; // 密码降级只提示一次, 避免每次重载刷屏
+
+// 配置要求密码但没有有效密码时, 明确告知用户 (而不是静默按无密码运行)
+static void warnIfDowngraded(void)
+{
+    if (g_cfg.security_downgraded && !g_warnedDowngrade)
+    {
+        bl_tray_notify(L"BlackLock — 密码未生效",
+                       L"配置开启了密码, 但 password 为空或无效 (如超长), "
+                       L"已按\"无需密码\"运行。请在配置文件中设置 password。");
+        g_warnedDowngrade = TRUE;
+    }
+    else if (!g_cfg.security_downgraded)
+    {
+        g_warnedDowngrade = FALSE; // 恢复正常后, 下次再出问题可再次提示
+    }
+}
 
 // 把当前配置推送给键盘钩子: 密码 / 是否需要密码 / 解锁快捷键。
 static void syncKeyhookFromConfig(void)
@@ -57,6 +75,9 @@ static void applyConfig(HWND hwnd)
     // 悬浮提示里的快捷键随配置更新
     bl_tray_update_tip(g_cfg.hotkey);
 
+    // 密码被强制降级时提示用户
+    warnIfDowngraded();
+
     // 快捷键即时生效 (暂停中则保持未注册)
     if (!g_paused)
     {
@@ -80,6 +101,13 @@ static void onMenuCommand(HWND hwnd, int cmd)
         break;
 
     case IDM_REQUIRE_PW:
+        // 禁止在没有密码时开启密码保护: 空密码下空回车即可解锁, 等于没开却给出安全错觉
+        if (!g_cfg.require_password && g_cfg.password[0] == 0)
+        {
+            bl_tray_notify(L"BlackLock — 无法开启密码",
+                           L"请先在配置文件中设置 password, 再开启密码保护。");
+            break;
+        }
         g_cfg.require_password = !g_cfg.require_password;
         bl_keyhook_set_require_password(g_cfg.require_password);
         bl_config_save_bool(&g_cfg, "require_password", g_cfg.require_password);
@@ -105,6 +133,16 @@ static void onMenuCommand(HWND hwnd, int cmd)
 
 static LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
+    // Explorer 崩溃/重启后任务栏重建 -> 必须重新添加托盘图标,
+    // 否则唯一的管理入口 (暂停/配置/退出) 永久消失, 且单实例互斥体让你也无法重开。
+    // 该消息由 RegisterWindowMessageW 动态获得, 不是常量, 只能在 switch 之前判断。
+    if (g_taskbarCreated && msg == g_taskbarCreated)
+    {
+        bl_tray_readd();
+        bl_tray_update_tip(g_cfg.hotkey);
+        return 0;
+    }
+
     switch (msg)
     {
     case WM_HOTKEY:
@@ -173,6 +211,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow)
     // --- 初始: 密码 / 是否需要密码 / 解锁快捷键 ---
     syncKeyhookFromConfig();
 
+    // --- 注册任务栏重建广播 (Explorer 重启后恢复托盘图标) ---
+    g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+
     // --- 创建隐藏主窗口 (承载热键与托盘回调, 永不显示) ---
     WNDCLASSW wc     = {0};
     wc.lpfnWndProc   = MainProc;
@@ -203,6 +244,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow)
     if (!icon)
         icon = LoadIconW(NULL, IDI_APPLICATION);
     bl_tray_add(g_mainHwnd, icon, g_cfg.hotkey);
+
+    // 托盘就绪后再提示 (启动时若密码无效需让用户看到)
+    warnIfDowngraded();
 
     // --- 配置热重载: 监视配置文件所在目录, 变更即重载 (密码/快捷键/自启即时生效) ---
     wchar_t watchDir[MAX_PATH];

@@ -118,12 +118,18 @@ static void rtrim(char *s)
         s[--n] = 0;
 }
 
-// 把 UTF-8 值写入 UTF-16 目标缓冲
-static void utf8ToW(const char *s, wchar_t *out, int cch)
+// 把 UTF-8 值写入 UTF-16 目标缓冲。成功返回 TRUE。
+// 失败 (如值超出缓冲容量、非法 UTF-8) 时返回 FALSE 并置空, 由调用方判定如何处理 ——
+// 关键: 不能把"转换失败"静默当成"空值", 否则超长密码会退化成空密码 (回车即解锁)。
+static BOOL utf8ToW(const char *s, wchar_t *out, int cch)
 {
     int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, out, cch);
     if (n <= 0)
+    {
         out[0] = 0;
+        return FALSE;
+    }
+    return TRUE;
 }
 
 // 解析文本 (原地修改), 填充 cfg 的 hotkey/autostart/password
@@ -207,8 +213,11 @@ static BOOL iniHasKey(const char *text, const char *key)
             p++;
         if (*p && *p != ';' && *p != '#' && *p != '[')
         {
-            const char *eq = strchr(p, '=');
-            if (eq && (!nl || eq < nl))
+            // 只在本行范围内找 '=' (用 memchr 限界):
+            // 若用 strchr 会一路扫到文件后方的 '=', 对无等号的行形成 O(n^2)。
+            const char *end = nl ? nl : (p + strlen(p));
+            const char *eq  = (const char *)memchr(p, '=', (size_t)(end - p));
+            if (eq)
             {
                 char keybuf[64];
                 int n = 0;
@@ -237,10 +246,11 @@ BOOL bl_config_load(BlConfig *cfg)
 {
     // 默认值 (配置文件缺失/键缺失时的回退)
     wcscpy_s(cfg->hotkey, BL_HOTKEY_MAX, L"Alt+L");
-    cfg->password[0]       = 0;     // 默认空密码 (简单锁屏, 回车即解锁)
-    cfg->autostart         = FALSE;
-    cfg->require_password  = FALSE;
-    cfg->path[0]           = 0;
+    cfg->password[0]         = 0;   // 默认空密码 (简单锁屏, 回车即解锁)
+    cfg->autostart           = FALSE;
+    cfg->require_password    = FALSE;
+    cfg->path[0]             = 0;
+    cfg->security_downgraded = FALSE;
 
     wchar_t exeCfg[MAX_PATH], appCfg[MAX_PATH];
     pathExeConfig(exeCfg, MAX_PATH);
@@ -289,6 +299,16 @@ BOOL bl_config_load(BlConfig *cfg)
     }
 
     free(text);
+
+    // 安全校验: 要求密码但没有有效密码 (为空, 或超长/非法导致转换失败而置空) 时,
+    // 绝不能假装"已受密码保护" —— 那样空回车即可解锁, 等于没保护。
+    // 这里强制降级为"无需密码", 并标记 security_downgraded 由上层提示用户。
+    if (cfg->require_password && cfg->password[0] == 0)
+    {
+        cfg->require_password    = FALSE;
+        cfg->security_downgraded = TRUE;
+    }
+
     return TRUE;
 }
 

@@ -37,13 +37,25 @@ jobs:
       - name: Build (MinSizeRel)
         run: cmake --build build --config MinSizeRel
 
+      - name: Verify PE architecture (${{ matrix.arch }})
+        shell: pwsh
+        # 防止发错架构: 校验 PE Machine 字段与本矩阵分支一致
+        run: |
+          $exe = "dist/${{ matrix.arch }}/BlackLock.exe"
+          $b = [IO.File]::ReadAllBytes($exe)
+          $m = [BitConverter]::ToUInt16($b, [BitConverter]::ToInt32($b, 0x3C) + 4)
+          $want = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0x14C }
+          if ($m -ne $want) { throw "架构不符: 期望 0x$($want.ToString('X4')), 实际 0x$($m.ToString('X4'))" }
+          Write-Host "PE Machine 0x$($m.ToString('X4')) OK"
+
       - name: Package (${{ matrix.arch }})
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
+          $d = "dist/${{ matrix.arch }}"
           New-Item -ItemType Directory -Force out | Out-Null
-          Copy-Item dist/BlackLock.exe "out/BlackLock-${{ matrix.arch }}.exe"
-          Compress-Archive -Path dist/BlackLock.exe, dist/config.ini `
+          Copy-Item "$d/BlackLock.exe" "out/BlackLock-${{ matrix.arch }}.exe"
+          Compress-Archive -Path "$d/BlackLock.exe", "$d/config.ini" `
             -DestinationPath "out/BlackLock-v$ver-${{ matrix.label }}.zip" -Force
 
       - name: Upload build artifacts
