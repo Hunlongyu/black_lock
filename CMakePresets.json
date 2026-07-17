@@ -13,7 +13,7 @@
     {
       "name": "msvc-x86",
       "displayName": "MSVC (Visual Studio 18 2026, x86/Win32)",
-      "description": "MSVC / cl.exe / 32 位 (输出仍到共享的 dist/)",
+      "description": "MSVC / cl.exe / 32 位 (输出到 dist/x86, 与 x64 分目录互不覆盖)",
       "generator": "Visual Studio 18 2026",
       "architecture": "Win32",
       "binaryDir": "${sourceDir}/build-x86"
