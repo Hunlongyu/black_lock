@@ -23,8 +23,10 @@
 #define BL_LOCK_CLASS L"BlackLockOverlay"
 
 // 自定义窗口消息
-#define WM_APP_TRAY (WM_APP + 1)  // 托盘图标回调
-#define WM_APP_ENTER (WM_APP + 2) // 锁屏中按下回车 -> 校验密码
+#define WM_APP_TRAY (WM_APP + 1)    // 托盘图标回调
+#define WM_APP_ENTER (WM_APP + 2)   // 锁屏中按下回车 -> 校验密码
+#define WM_APP_RESTORE (WM_APP + 3) // 第二实例请求: 重建托盘图标并提示已在运行
+#define WM_APP_LOCKNOW (WM_APP + 4) // 托盘"立即锁定" (菜单关闭后再执行)
 
 // 资源与标识 ID
 #define BL_HOTKEY_ID 1  // RegisterHotKey 的标识
@@ -38,6 +40,7 @@
 #define IDM_CONFIG 1003
 #define IDM_EXIT 1004
 #define IDM_REQUIRE_PW 1005
+#define IDM_LOCKNOW 1006
 
 // 点击版本项打开的发布页
 #define BL_RELEASES_URL L"https://github.com/Hunlongyu/black_lock/releases"

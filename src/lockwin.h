@@ -10,7 +10,8 @@
 BOOL bl_lockwin_init(HINSTANCE hInst);
 
 // 进入锁定态: 覆盖虚拟桌面、装键盘钩子、防睡眠、阻关机、隐藏光标。
-void bl_lock_enter(void);
+// 必要资源 (黑窗/钩子/定时器) 任一失败则完整回滚并返回 FALSE, 不会进入半锁定状态。
+BOOL bl_lock_enter(void);
 
 // 退出锁定态: 卸钩子、隐藏黑窗、恢复电源/光标。
 void bl_lock_exit(void);

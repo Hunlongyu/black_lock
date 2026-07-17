@@ -7,6 +7,9 @@
 // 应用图标 (ID 1, 与 main.c 中 MAKEINTRESOURCEW(1) 对应)
 1 ICON "app.ico"
 
+// 应用清单: asInvoker + Per-Monitor V2 DPI + supportedOS + longPathAware
+1 RT_MANIFEST "app.manifest"
+
 // 默认配置模板 (单一事实来源: src/config.default.ini)。
 // 运行时若无有效配置, 取此资源字节写入 %APPDATA%\BlackLock\config.ini。
 BL_DEFAULT_CONFIG RCDATA "config.default.ini"

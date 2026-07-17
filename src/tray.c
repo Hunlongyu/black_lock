@@ -73,6 +73,8 @@ int bl_tray_track_menu(HWND hwnd, BOOL autostartChecked, BOOL requirePwChecked, 
     AppendMenuW(menu, MF_STRING, IDM_RELEASES, L"BlackLock v" BL_VERSION_W);
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
 
+    AppendMenuW(menu, MF_STRING, IDM_LOCKNOW, L"立即锁定");
+    AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(menu, MF_STRING | (autostartChecked ? MF_CHECKED : 0), IDM_AUTOSTART, L"开机自启");
     AppendMenuW(menu, MF_STRING | (requirePwChecked ? MF_CHECKED : 0), IDM_REQUIRE_PW, L"开启密码");
     AppendMenuW(menu, MF_STRING | (pauseChecked ? MF_CHECKED : 0), IDM_PAUSE, L"暂停");

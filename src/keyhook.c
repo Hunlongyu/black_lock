@@ -171,12 +171,19 @@ BOOL bl_keyhook_install(HWND notifyHwnd)
     return (g_hook != NULL);
 }
 
-void bl_keyhook_uninstall(void)
+// 卸载键盘钩子。成功 (或本就未安装) 返回 TRUE。
+// 卸载失败时必须保留 g_hook —— 若清空句柄, 残留钩子会继续吞掉整个桌面的键盘,
+// 而程序已经再也无法管理/重试卸载它。
+BOOL bl_keyhook_uninstall(void)
 {
-    if (g_hook)
+    if (!g_hook)
     {
-        UnhookWindowsHookEx(g_hook);
-        g_hook = NULL;
+        g_notify = NULL;
+        return TRUE;
     }
+    if (!UnhookWindowsHookEx(g_hook))
+        return FALSE; // 保留句柄, 由调用方决定重试或告警
+    g_hook   = NULL;
     g_notify = NULL;
+    return TRUE;
 }

@@ -19,8 +19,8 @@ void bl_keyhook_set_hotkey(UINT mods, UINT vk);
 // 回车 (或未启用密码时再次按解锁快捷键) 向 notifyHwnd 投递 WM_APP_ENTER。成功返回 TRUE。
 BOOL bl_keyhook_install(HWND notifyHwnd);
 
-// 卸载键盘钩子。
-void bl_keyhook_uninstall(void);
+// 卸载键盘钩子。成功 (或本就未安装) 返回 TRUE;失败时保留句柄以便重试。
+BOOL bl_keyhook_uninstall(void);
 
 // 是否应解锁: 未启用密码 -> TRUE; 启用密码 -> 校验当前输入缓冲是否与目标一致。
 BOOL bl_keyhook_should_unlock(void);

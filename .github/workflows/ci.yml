@@ -1,0 +1,51 @@
+name: CI
+
+# 每次推送 / PR: 两个架构都编译 + 跑单元测试 + 校验零依赖与架构。
+# 目的是让问题在合并前暴露, 而不是等到打标签发版时才发现。
+on:
+  push:
+    branches: ["main"]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            cmake_arch: x64
+          - arch: x86
+            cmake_arch: Win32
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure (MSVC ${{ matrix.arch }})
+        run: cmake -S . -B build -A ${{ matrix.cmake_arch }}
+
+      - name: Build (MinSizeRel)
+        run: cmake --build build --config MinSizeRel
+
+      - name: Test (ctest)
+        run: ctest --test-dir build -C MinSizeRel --output-on-failure
+
+      - name: Verify runtime deps + PE arch
+        shell: pwsh
+        run: |
+          $exe = "dist/${{ matrix.arch }}/BlackLock.exe"
+          # 1) 零运行时依赖 (静态 CRT)
+          $dumpbin = (Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -EA SilentlyContinue |
+                      Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1).FullName
+          $bad = & $dumpbin /dependents $exe | Select-String -Pattern 'VCRUNTIME|api-ms-win-crt'
+          if ($bad) { $bad; throw "产物仍依赖 VC++ 运行库" }
+          # 2) 架构正确
+          $b = [IO.File]::ReadAllBytes($exe)
+          $m = [BitConverter]::ToUInt16($b, [BitConverter]::ToInt32($b, 0x3C) + 4)
+          $want = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0x14C }
+          if ($m -ne $want) { throw "架构不符: 期望 0x$($want.ToString('X4')), 实际 0x$($m.ToString('X4'))" }
+          Write-Host "零依赖 + 架构 0x$($m.ToString('X4')) OK"

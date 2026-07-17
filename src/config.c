@@ -48,15 +48,49 @@ static char *readFileAll(const wchar_t *path, DWORD *outLen)
     return buf;
 }
 
-static BOOL writeFileAll(const wchar_t *path, const char *data, DWORD len)
+// 原子写: 先整写临时文件 (循环写满 + 落盘), 再整体替换目标。
+// 不能直接 CREATE_ALWAYS 覆盖原文件 —— 那样一旦中途失败 (磁盘满/权限/进程被杀),
+// 原配置会变成空文件或半截文件, 下次加载就退回"无密码"。
+static BOOL writeFileAtomic(const wchar_t *path, const char *data, DWORD len)
 {
-    HANDLE h = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    wchar_t tmp[MAX_PATH];
+    if (swprintf(tmp, MAX_PATH, L"%s.tmp", path) < 0)
+        return FALSE;
+
+    HANDLE h = CreateFileW(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE)
         return FALSE;
-    DWORD wrote = 0;
-    BOOL ok     = WriteFile(h, data, len, &wrote, NULL);
+
+    BOOL ok          = TRUE;
+    const char *p    = data;
+    DWORD left       = len;
+    while (left > 0)
+    {
+        DWORD wrote = 0;
+        if (!WriteFile(h, p, left, &wrote, NULL) || wrote == 0)
+        {
+            ok = FALSE;
+            break;
+        }
+        p += wrote;
+        left -= wrote;
+    }
+    if (ok)
+        ok = FlushFileBuffers(h); // 确保数据落盘后再替换
     CloseHandle(h);
-    return ok && wrote == len;
+
+    if (!ok)
+    {
+        DeleteFileW(tmp);
+        return FALSE;
+    }
+    // 同卷替换, 失败则保留原文件不动
+    if (!MoveFileExW(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        DeleteFileW(tmp);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 // 把内嵌的默认配置资源 (BL_DEFAULT_CONFIG, 源自 src/config.default.ini) 写入 path。
@@ -72,33 +106,57 @@ static BOOL writeDefaultConfig(const wchar_t *path)
     DWORD sz      = SizeofResource(NULL, hRes);
     if (!p || sz == 0)
         return FALSE;
-    return writeFileAll(path, (const char *)p, sz);
+    return writeFileAtomic(path, (const char *)p, sz);
 }
 
 /* ---------- 路径定位 ---------- */
 
-// exe 同目录 config.ini
-static void pathExeConfig(wchar_t *out, size_t cch)
+// exe 同目录 config.ini。成功返回 TRUE。
+// 注意: 取不到 exe 路径 (如路径超长) 时必须返回 FALSE, 绝不能退回相对路径 "config.ini" ——
+// 那会读到当前工作目录里不相干的文件 (快捷方式可任意指定工作目录)。
+static BOOL pathExeConfig(wchar_t *out, size_t cch)
 {
     wchar_t dir[MAX_PATH];
-    if (bl_get_exe_dir(dir, MAX_PATH))
-        swprintf(out, cch, L"%sconfig.ini", dir);
-    else
-        wcscpy_s(out, cch, L"config.ini");
+    if (!bl_get_exe_dir(dir, MAX_PATH))
+        return FALSE;
+    return swprintf(out, cch, L"%sconfig.ini", dir) > 0;
 }
 
 // %APPDATA%\BlackLock\config.ini (并确保目录存在)
 static BOOL pathAppDataConfig(wchar_t *out, size_t cch, BOOL createDir)
 {
-    const wchar_t *appdata = _wgetenv(L"APPDATA"); // 指向 CRT 静态缓冲, 不释放
-    if (!appdata)
+    // 用 GetEnvironmentVariableW 并检查长度 (返回值 >= 缓冲即为截断), 而非 _wgetenv 直接拼接
+    wchar_t appdata[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
         return FALSE;
 
     wchar_t dir[MAX_PATH];
-    swprintf(dir, MAX_PATH, L"%s\\BlackLock", appdata);
+    if (swprintf(dir, MAX_PATH, L"%s\\BlackLock", appdata) < 0)
+        return FALSE;
     if (createDir)
         CreateDirectoryW(dir, NULL); // 已存在则忽略
-    swprintf(out, cch, L"%s\\config.ini", dir);
+    return swprintf(out, cch, L"%s\\config.ini", dir) > 0;
+}
+
+/* ---------- 密码字符集 ---------- */
+
+// 密码只允许 ASCII 字母与数字。
+// 原因: 锁定期间靠 WH_KEYBOARD_LL + ToUnicode 逐键翻译收集密码,
+//       死键/输入法(IME)/代理项对(emoji)在这条路径上无法可靠输入 ——
+//       若允许这些字符, 用户会"设了密码却永远输不进去", 只能 Ctrl+Alt+Del 逃生。
+//       因此在加载期就限制字符集并明确告知, 而不是让用户事后被锁在外面。
+BOOL bl_password_chars_ok(const wchar_t *pw)
+{
+    if (!pw || !*pw)
+        return FALSE; // 空密码不算有效密码
+    for (const wchar_t *p = pw; *p; p++)
+    {
+        wchar_t c = *p;
+        BOOL ok   = (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9');
+        if (!ok)
+            return FALSE;
+    }
     return TRUE;
 }
 
@@ -250,13 +308,14 @@ BOOL bl_config_load(BlConfig *cfg)
     cfg->autostart           = FALSE;
     cfg->require_password    = FALSE;
     cfg->path[0]             = 0;
+    cfg->password_valid      = FALSE;
     cfg->security_downgraded = FALSE;
 
     wchar_t exeCfg[MAX_PATH], appCfg[MAX_PATH];
-    pathExeConfig(exeCfg, MAX_PATH);
+    BOOL haveExeCfg = pathExeConfig(exeCfg, MAX_PATH);
 
-    // 1) exe 同目录优先
-    if (GetFileAttributesW(exeCfg) != INVALID_FILE_ATTRIBUTES)
+    // 1) exe 同目录优先 (取不到 exe 路径则跳过, 不猜相对路径)
+    if (haveExeCfg && GetFileAttributesW(exeCfg) != INVALID_FILE_ATTRIBUTES)
     {
         wcscpy_s(cfg->path, MAX_PATH, exeCfg);
     }
@@ -300,10 +359,13 @@ BOOL bl_config_load(BlConfig *cfg)
 
     free(text);
 
-    // 安全校验: 要求密码但没有有效密码 (为空, 或超长/非法导致转换失败而置空) 时,
-    // 绝不能假装"已受密码保护" —— 那样空回车即可解锁, 等于没保护。
+    // 密码有效性: 非空 + 仅 ASCII 字母数字 (超长/非法 UTF-8 已在转换时置空, 一并被判无效)
+    cfg->password_valid = bl_password_chars_ok(cfg->password);
+
+    // 安全校验: 要求密码但没有有效密码时, 绝不能假装"已受密码保护"
+    // (空密码 -> 空回车即解锁; 含 IME/emoji 等字符 -> 根本输不进去)。
     // 这里强制降级为"无需密码", 并标记 security_downgraded 由上层提示用户。
-    if (cfg->require_password && cfg->password[0] == 0)
+    if (cfg->require_password && !cfg->password_valid)
     {
         cfg->require_password    = FALSE;
         cfg->security_downgraded = TRUE;
@@ -415,7 +477,7 @@ BOOL bl_config_save_bool(const BlConfig *cfg, const char *key, BOOL value)
             olen += (size_t)w;
     }
 
-    BOOL ok = writeFileAll(cfg->path, out, (DWORD)olen);
+    BOOL ok = writeFileAtomic(cfg->path, out, (DWORD)olen);
     free(out);
     free(text);
     return ok;

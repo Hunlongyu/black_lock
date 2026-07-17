@@ -37,6 +37,21 @@ jobs:
       - name: Build (MinSizeRel)
         run: cmake --build build --config MinSizeRel
 
+      - name: Test (ctest)
+        # 测试不过就不发版
+        run: ctest --test-dir build -C MinSizeRel --output-on-failure
+
+      - name: Verify runtime deps (零依赖)
+        shell: pwsh
+        # 静态 CRT 的底线: 产物不得依赖 VC++ 运行库, 否则干净系统起不来
+        run: |
+          $dumpbin = (Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -EA SilentlyContinue |
+                      Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1).FullName
+          $deps = & $dumpbin /dependents "dist/${{ matrix.arch }}/BlackLock.exe"
+          $bad = $deps | Select-String -Pattern 'VCRUNTIME|api-ms-win-crt'
+          if ($bad) { $bad; throw "产物仍依赖 VC++ 运行库, 违反零依赖约定" }
+          Write-Host "零运行时依赖 OK"
+
       - name: Verify PE architecture (${{ matrix.arch }})
         shell: pwsh
         # 防止发错架构: 校验 PE Machine 字段与本矩阵分支一致
@@ -59,7 +74,7 @@ jobs:
             -DestinationPath "out/BlackLock-v$ver-${{ matrix.label }}.zip" -Force
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: blacklock-${{ matrix.arch }}
           path: out/*
@@ -69,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts # 各架构落到 artifacts/blacklock-<arch>/
 

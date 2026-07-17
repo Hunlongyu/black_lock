@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 
 project(BlackLock
-    VERSION 1.2.0
+    VERSION 1.3.0
     DESCRIPTION "无界面黑屏锁屏工具 - Windows 10/11 x64"
     LANGUAGES C
 )
@@ -116,7 +116,10 @@ target_compile_options(BlackLock PRIVATE
 # 注: 不使用 /GS-。栈保护 (/GS) 保持默认开启, 体积收益极小但能防栈溢出利用。
 
 # ---- 链接选项 (去调试信息 + 合并/裁剪) ----
+# /MANIFEST:NO —— 清单由 app.rc 以 RT_MANIFEST 内嵌 (含 DPI/supportedOS/longPathAware),
+# 关掉链接器自动生成, 避免与自带清单冲突。
 target_link_options(BlackLock PRIVATE
+    /MANIFEST:NO
     $<$<CONFIG:Release,MinSizeRel>:/DEBUG:NONE>
     $<$<CONFIG:Release,MinSizeRel>:/OPT:REF>
     $<$<CONFIG:Release,MinSizeRel>:/OPT:ICF>
@@ -147,6 +150,19 @@ if(CLANG_FORMAT)
         COMMAND ${CLANG_FORMAT} --dry-run --Werror ${BL_SOURCES}
         COMMENT "检查格式" VERBATIM)
 endif()
+
+# ---- 单元测试 (ctest): 配置层无 UI, 可直接测 ----
+# 覆盖密码校验/字符集/老配置迁移等历史真实缺陷。锁屏与钩子涉及全局键盘, 不做自动化。
+enable_testing()
+add_executable(test_config tests/test_config.c src/config.c src/util.c)
+target_include_directories(test_config PRIVATE src)
+target_compile_definitions(test_config PRIVATE
+    UNICODE _UNICODE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+target_compile_options(test_config PRIVATE /W4 /utf-8 /std:c17)
+set_property(TARGET test_config PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+target_link_libraries(test_config PRIVATE kernel32 shell32 advapi32 bcrypt user32)
+add_test(NAME config_unit COMMAND test_config)
 
 install(TARGETS BlackLock RUNTIME DESTINATION .)
 

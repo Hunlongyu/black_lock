@@ -33,14 +33,16 @@ static void releaseModifiers(void)
     SendInput(ARRAYSIZE(vks), in, sizeof(INPUT));
 }
 
-// 覆盖整个虚拟桌面 (多屏拼接区域)
-static void coverVirtualDesktop(void)
+// 覆盖整个虚拟桌面 (多屏拼接区域)。成功返回 TRUE。
+static BOOL coverVirtualDesktop(void)
 {
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    SetWindowPos(g_lockHwnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_SHOWWINDOW);
+    if (vw <= 0 || vh <= 0)
+        return FALSE;
+    return SetWindowPos(g_lockHwnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_SHOWWINDOW);
 }
 
 // 前台窗口是否属于任务管理器。
@@ -88,7 +90,11 @@ static LRESULT CALLBACK LockProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         else
         {
-            bl_keyhook_clear(); // 密码错误 -> 清空, 无反应
+            bl_keyhook_clear();
+            // 密码错误 -> 蜂鸣提示。
+            // 不用托盘气泡: 锁定时黑窗全屏置顶, 气泡要么被盖住(等于没提示),
+            // 要么飘在纯黑屏上破坏观感, 且 Win11 toast 时机不可控。蜂鸣可靠且不破坏黑屏。
+            MessageBeep(MB_ICONHAND);
         }
         return 0;
 
@@ -152,43 +158,68 @@ BOOL bl_lock_is_active(void)
     return g_active;
 }
 
-void bl_lock_enter(void)
+// 进入锁定态。成功返回 TRUE。
+//
+// 分阶段初始化 + 失败回滚: 只有当"黑窗已覆盖"与"键盘钩子已装上"两个必要条件都成立时,
+// 才提交 g_active。否则会出现最糟的两种局面:
+//   - 钩子装上了但黑窗没显示 -> 桌面看着正常, 键盘却被吞光;
+//   - 黑窗显示了但钩子没装上 -> 一片黑却收不到按键, 密码打不进去, 只能 Ctrl+Alt+Del。
+BOOL bl_lock_enter(void)
 {
     if (g_active || !g_lockHwnd)
-        return;
-    g_active = TRUE;
+        return FALSE;
 
     // 先清掉触发热键残留的 Alt/Ctrl 等修饰键 (此时钩子尚未安装, 合成事件能到达系统)
     releaseModifiers();
 
-    // 禁止睡眠/息屏
-    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+    // 1) 必要条件: 黑窗铺满虚拟桌面
+    if (!coverVirtualDesktop())
+        return FALSE; // 尚未改动任何状态
 
-    // 铺满虚拟桌面并置顶激活
-    coverVirtualDesktop();
+    // 2) 必要条件: 键盘钩子
+    if (!bl_keyhook_install(g_lockHwnd))
+    {
+        ShowWindow(g_lockHwnd, SW_HIDE); // 回滚已显示的黑窗
+        return FALSE;
+    }
+
+    // 3) 必要条件: 置顶定时器 (Ctrl+Alt+Del 逃生口依赖它给任务管理器让位)
+    if (!SetTimer(g_lockHwnd, BL_TIMER_TOP, 1000, NULL))
+    {
+        bl_keyhook_uninstall(); // 逆序回滚
+        ShowWindow(g_lockHwnd, SW_HIDE);
+        return FALSE;
+    }
+
+    // 4) 必要资源齐备 -> 正式提交锁定态
+    g_active = TRUE;
+
+    // 5) 以下为增强项, 失败不影响"能解锁"这一底线, 故不回滚
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
     SetForegroundWindow(g_lockHwnd);
     while (ShowCursor(FALSE) >= 0)
     {
     }
-
-    // 软阻止关机
     ShutdownBlockReasonCreate(g_lockHwnd, L"屏幕已锁定");
-
-    // 键盘钩子 (回车投递 WM_APP_ENTER 给黑窗)
-    bl_keyhook_install(g_lockHwnd);
-
-    // 保持置顶定时器
-    SetTimer(g_lockHwnd, BL_TIMER_TOP, 1000, NULL);
+    return TRUE;
 }
 
 void bl_lock_exit(void)
 {
     if (!g_active)
         return;
-    g_active = FALSE;
 
+    // 必须先确认钩子已卸载再退出锁定:
+    // 若带着"卸不掉的钩子"隐藏黑窗, 用户会得到一个看似正常、键盘却全废的桌面 —— 比继续锁着更糟。
+    // 因此卸载失败时重试一次, 仍失败则保持锁定并蜂鸣告警 (Ctrl+Alt+Del 逃生口仍可用)。
+    if (!bl_keyhook_uninstall() && !bl_keyhook_uninstall())
+    {
+        MessageBeep(MB_ICONHAND);
+        return; // 维持锁定态, 不做半吊子退出
+    }
+
+    g_active = FALSE;
     KillTimer(g_lockHwnd, BL_TIMER_TOP);
-    bl_keyhook_uninstall();
 
     // 钩子已卸载, 补发修饰键 keyup, 清除锁定期间被吞掉的 Alt/Ctrl 等抬起事件,
     // 避免解锁后修饰键"卡住"。
