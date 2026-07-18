@@ -49,4 +49,12 @@
 #define BL_PW_MAX 256
 #define BL_HOTKEY_MAX 64
 
+// 路径缓冲上限。
+// 不用 MAX_PATH(260): 那样装在深目录 (OneDrive 同步目录、深层用户目录等) 时,
+// 取 exe 路径会被截断, 导致读不到 exe 同目录的便携配置。
+// 32768 是 Windows 扩展长度路径的缓冲上限；文件操作会转换为 \\?\ 形式，
+// 不依赖机器级 LongPathsEnabled 策略。
+// 独立的临时路径缓冲较大, 一律用堆分配, 不要放栈上。
+#define BL_PATH_MAX 32768
+
 #endif // BLACKLOCK_APP_H

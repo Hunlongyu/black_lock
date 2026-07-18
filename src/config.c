@@ -17,8 +17,12 @@
 // 读取整个文件到 malloc 缓冲 (追加 NUL)。返回缓冲 (调用者 free), 失败 NULL。
 static char *readFileAll(const wchar_t *path, DWORD *outLen)
 {
-    HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+    wchar_t *apiPath = bl_file_api_path(path);
+    if (!apiPath)
+        return NULL;
+    HANDLE h = CreateFileW(apiPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, NULL);
+    free(apiPath);
     if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
@@ -53,13 +57,34 @@ static char *readFileAll(const wchar_t *path, DWORD *outLen)
 // 原配置会变成空文件或半截文件, 下次加载就退回"无密码"。
 static BOOL writeFileAtomic(const wchar_t *path, const char *data, DWORD len)
 {
-    wchar_t tmp[MAX_PATH];
-    if (swprintf(tmp, MAX_PATH, L"%s.tmp", path) < 0)
+    wchar_t *tmp = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t)); // 长路径缓冲较大, 走堆
+    if (!tmp)
         return FALSE;
+    if (swprintf(tmp, BL_PATH_MAX, L"%s.tmp", path) < 0)
+    {
+        free(tmp);
+        return FALSE;
+    }
 
-    HANDLE h = CreateFileW(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE)
+    wchar_t *tmpApi  = bl_file_api_path(tmp);
+    wchar_t *pathApi = bl_file_api_path(path);
+    if (!tmpApi || !pathApi)
+    {
+        free(tmpApi);
+        free(pathApi);
+        free(tmp);
         return FALSE;
+    }
+
+    HANDLE h =
+        CreateFileW(tmpApi, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+    {
+        free(tmpApi);
+        free(pathApi);
+        free(tmp);
+        return FALSE;
+    }
 
     BOOL ok          = TRUE;
     const char *p    = data;
@@ -81,15 +106,24 @@ static BOOL writeFileAtomic(const wchar_t *path, const char *data, DWORD len)
 
     if (!ok)
     {
-        DeleteFileW(tmp);
+        DeleteFileW(tmpApi);
+        free(tmpApi);
+        free(pathApi);
+        free(tmp);
         return FALSE;
     }
     // 同卷替换, 失败则保留原文件不动
-    if (!MoveFileExW(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    if (!MoveFileExW(tmpApi, pathApi, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
     {
-        DeleteFileW(tmp);
+        DeleteFileW(tmpApi);
+        free(tmpApi);
+        free(pathApi);
+        free(tmp);
         return FALSE;
     }
+    free(tmpApi);
+    free(pathApi);
+    free(tmp);
     return TRUE;
 }
 
@@ -116,27 +150,45 @@ static BOOL writeDefaultConfig(const wchar_t *path)
 // 那会读到当前工作目录里不相干的文件 (快捷方式可任意指定工作目录)。
 static BOOL pathExeConfig(wchar_t *out, size_t cch)
 {
-    wchar_t dir[MAX_PATH];
-    if (!bl_get_exe_dir(dir, MAX_PATH))
+    wchar_t *dir = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    if (!dir)
         return FALSE;
-    return swprintf(out, cch, L"%sconfig.ini", dir) > 0;
+    BOOL ok = bl_get_exe_dir(dir, BL_PATH_MAX) && swprintf(out, cch, L"%sconfig.ini", dir) > 0;
+    free(dir);
+    return ok;
 }
 
 // %APPDATA%\BlackLock\config.ini (并确保目录存在)
 static BOOL pathAppDataConfig(wchar_t *out, size_t cch, BOOL createDir)
 {
     // 用 GetEnvironmentVariableW 并检查长度 (返回值 >= 缓冲即为截断), 而非 _wgetenv 直接拼接
-    wchar_t appdata[MAX_PATH];
-    DWORD n = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH)
+    wchar_t *dir = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    if (!dir)
         return FALSE;
 
-    wchar_t dir[MAX_PATH];
-    if (swprintf(dir, MAX_PATH, L"%s\\BlackLock", appdata) < 0)
-        return FALSE;
-    if (createDir)
-        CreateDirectoryW(dir, NULL); // 已存在则忽略
-    return swprintf(out, cch, L"%s\\config.ini", dir) > 0;
+    BOOL ok = FALSE;
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", dir, BL_PATH_MAX);
+    if (n > 0 && n < BL_PATH_MAX)
+    {
+        // 就地在 %APPDATA% 后追加子目录, 避免再开一个大缓冲
+        if (swprintf(dir + n, BL_PATH_MAX - n, L"\\BlackLock") > 0)
+        {
+            if (createDir)
+            {
+                wchar_t *apiDir = bl_file_api_path(dir);
+                if (!apiDir)
+                {
+                    free(dir);
+                    return FALSE;
+                }
+                CreateDirectoryW(apiDir, NULL); // 已存在则忽略
+                free(apiDir);
+            }
+            ok = swprintf(out, cch, L"%s\\config.ini", dir) > 0;
+        }
+    }
+    free(dir);
+    return ok;
 }
 
 /* ---------- 密码字符集 ---------- */
@@ -248,8 +300,12 @@ static void parseIni(char *text, BlConfig *cfg)
 // 追加内容到已存在文件末尾。成功返回 TRUE。
 static BOOL appendFile(const wchar_t *path, const char *data, DWORD len)
 {
-    HANDLE h = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+    wchar_t *apiPath = bl_file_api_path(path);
+    if (!apiPath)
+        return FALSE;
+    HANDLE h = CreateFileW(apiPath, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, NULL);
+    free(apiPath);
     if (h == INVALID_HANDLE_VALUE)
         return FALSE;
     SetFilePointer(h, 0, NULL, FILE_END);
@@ -311,29 +367,46 @@ BOOL bl_config_load(BlConfig *cfg)
     cfg->password_valid      = FALSE;
     cfg->security_downgraded = FALSE;
 
-    wchar_t exeCfg[MAX_PATH], appCfg[MAX_PATH];
-    BOOL haveExeCfg = pathExeConfig(exeCfg, MAX_PATH);
+    // 长路径缓冲较大 (各 64KB), 放堆上而非栈上
+    wchar_t *exeCfg = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    wchar_t *appCfg = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    if (!exeCfg || !appCfg)
+    {
+        free(exeCfg);
+        free(appCfg);
+        return FALSE;
+    }
+
+    BOOL haveExeCfg = pathExeConfig(exeCfg, BL_PATH_MAX);
 
     // 1) exe 同目录优先 (取不到 exe 路径则跳过, 不猜相对路径)
-    if (haveExeCfg && GetFileAttributesW(exeCfg) != INVALID_FILE_ATTRIBUTES)
+    if (haveExeCfg && bl_file_exists(exeCfg))
     {
-        wcscpy_s(cfg->path, MAX_PATH, exeCfg);
+        wcscpy_s(cfg->path, BL_PATH_MAX, exeCfg);
     }
     // 2) 回退 %APPDATA%\BlackLock
-    else if (pathAppDataConfig(appCfg, MAX_PATH, FALSE) &&
-             GetFileAttributesW(appCfg) != INVALID_FILE_ATTRIBUTES)
+    else if (pathAppDataConfig(appCfg, BL_PATH_MAX, FALSE) && bl_file_exists(appCfg))
     {
-        wcscpy_s(cfg->path, MAX_PATH, appCfg);
+        wcscpy_s(cfg->path, BL_PATH_MAX, appCfg);
     }
     // 3) 都不存在 -> 只在 %APPDATA%\BlackLock 生成默认 (保持 exe 目录洁净;
     //    便携性由"可选的 exe 同目录 config.ini 优先级最高"保证)
     else
     {
-        if (pathAppDataConfig(appCfg, MAX_PATH, TRUE) && writeDefaultConfig(appCfg))
-            wcscpy_s(cfg->path, MAX_PATH, appCfg);
+        if (pathAppDataConfig(appCfg, BL_PATH_MAX, TRUE) && writeDefaultConfig(appCfg))
+        {
+            wcscpy_s(cfg->path, BL_PATH_MAX, appCfg);
+        }
         else
+        {
+            free(exeCfg);
+            free(appCfg);
             return FALSE; // 无法读取也无法生成
+        }
     }
+
+    free(exeCfg);
+    free(appCfg);
 
     DWORD flen  = 0;
     char *text  = readFileAll(cfg->path, &flen);

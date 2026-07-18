@@ -13,7 +13,7 @@ typedef struct
     BOOL autostart;                  // 是否开机自启
     BOOL require_password;           // 解锁是否需要密码 (false: 回车/再次快捷键即解锁)
     wchar_t password[BL_PW_MAX];     // 明文密码 (仅 require_password=true 时生效)
-    wchar_t path[MAX_PATH];          // 实际生效的配置文件绝对路径
+    wchar_t path[BL_PATH_MAX];       // 实际生效的配置文件绝对路径 (支持长路径)
     BOOL password_valid;             // 密码非空且仅含 ASCII 字母/数字 (可作为有效密码使用)
     BOOL security_downgraded;        // 配置要求密码但密码无效 -> 已强制降级为无需密码
 } BlConfig;

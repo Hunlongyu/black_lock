@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <shellapi.h>
 // clang-format on
+#include <stdlib.h>
 #include <wchar.h>
 #include "app.h"
 #include "config.h"
@@ -17,6 +18,7 @@
 #include "lockwin.h"
 #include "keyhook.h"
 #include "tray.h"
+#include "util.h"
 
 static BlConfig g_cfg;
 static BOOL g_paused          = FALSE;
@@ -62,7 +64,7 @@ static BOOL reloadConfigOnly(void)
 {
     // 若配置文件此刻不存在 (编辑器保存的瞬间可能短暂删除重建), 跳过本次,
     // 避免读到半成品或误把默认配置写回覆盖用户改动。
-    if (g_cfg.path[0] && GetFileAttributesW(g_cfg.path) == INVALID_FILE_ATTRIBUTES)
+    if (g_cfg.path[0] && !bl_file_exists(g_cfg.path))
         return FALSE;
 
     BlConfig tmp;
@@ -84,7 +86,7 @@ static void applyConfig(HWND hwnd)
     // 开机自启与配置保持一致 (幂等; 手改配置文件也能同步注册表)
     if (!bl_autostart_sync(g_cfg.autostart))
         bl_tray_notify(L"BlackLock — 开机自启设置失败",
-                       L"无法写入注册表启动项, 开机自启可能未生效。");
+                       L"程序路径过长或无法写入注册表启动项, 开机自启可能未生效。");
 
     bl_tray_update_tip(g_cfg.hotkey);
     warnIfDowngraded();
@@ -134,7 +136,8 @@ static void onMenuCommand(HWND hwnd, int cmd)
         // 先写系统, 成功后才提交内存与配置文件 —— 避免菜单显示"已开启"而注册表其实没写进去
         if (!bl_autostart_sync(want))
         {
-            bl_tray_notify(L"BlackLock — 开机自启设置失败", L"无法写入注册表启动项, 设置未更改。");
+            bl_tray_notify(L"BlackLock — 开机自启设置失败",
+                           L"程序路径过长或无法写入注册表启动项, 设置未更改。");
             break;
         }
         g_cfg.autostart = want;
@@ -349,20 +352,30 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow)
                        L"快捷键注册失败 (可能被其它程序占用, 或配置写法有误)。\n"
                        L"可用托盘菜单\"立即锁定\", 或在配置文件中换一个 hotkey。");
     if (!autostartOk)
-        bl_tray_notify(L"BlackLock — 开机自启设置失败", L"无法写入注册表启动项, 开机自启可能未生效。");
+        bl_tray_notify(L"BlackLock — 开机自启设置失败",
+                       L"程序路径过长或无法写入注册表启动项, 开机自启可能未生效。");
     warnIfDowngraded();
 
     // --- 配置热重载: 监视配置所在目录, 仅 config.ini 变更才重载 ---
-    wchar_t watchDir[MAX_PATH];
-    wcscpy_s(watchDir, MAX_PATH, g_cfg.path);
-    wchar_t *slash = wcsrchr(watchDir, L'\\');
-    if (slash)
-        slash[1] = 0; // 只保留目录部分
-
-    HANDLE hDir = CreateFileW(watchDir, FILE_LIST_DIRECTORY,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-                              OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-                              NULL);
+    HANDLE hDir = INVALID_HANDLE_VALUE;
+    wchar_t *watchDir = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t)); // 长路径, 走堆
+    if (watchDir)
+    {
+        wcscpy_s(watchDir, BL_PATH_MAX, g_cfg.path);
+        wchar_t *slash = wcsrchr(watchDir, L'\\');
+        if (slash)
+            slash[1] = 0; // 只保留目录部分
+        wchar_t *apiWatchDir = bl_file_api_path(watchDir);
+        if (apiWatchDir)
+        {
+            hDir = CreateFileW(apiWatchDir, FILE_LIST_DIRECTORY,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                               OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+                               NULL);
+            free(apiWatchDir);
+        }
+        free(watchDir); // 目录句柄已开, 路径字符串不再需要
+    }
     OVERLAPPED ov = {0};
     DWORD notifyBuf[1024]; // DWORD 数组以保证 FILE_NOTIFY_INFORMATION 要求的对齐
     const DWORD kFilter = FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME;

@@ -8,6 +8,7 @@
 #include <windows.h>
 // clang-format on
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 #include "config.h"
@@ -22,14 +23,34 @@ static void check(const char *name, int cond)
         g_fail++;
 }
 
+// 取测试 exe 同目录的 config.ini 路径 (堆上, 调用者 free)。支持长路径。
+static wchar_t *testCfgPath(void)
+{
+    wchar_t *dir = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    if (!dir)
+        return NULL;
+    if (!bl_get_exe_dir(dir, BL_PATH_MAX) ||
+        wcscat_s(dir, BL_PATH_MAX, L"config.ini") != 0)
+    {
+        free(dir);
+        return NULL;
+    }
+    return dir;
+}
+
 // 在测试 exe 同目录写 config.ini (bl_config_load 会优先命中它)
 static void writeCfg(const char *body)
 {
-    wchar_t dir[MAX_PATH], path[MAX_PATH];
-    if (!bl_get_exe_dir(dir, MAX_PATH))
+    wchar_t *path = testCfgPath();
+    if (!path)
         return;
-    swprintf(path, MAX_PATH, L"%sconfig.ini", dir);
-    HANDLE h = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    wchar_t *apiPath = bl_file_api_path(path);
+    free(path);
+    if (!apiPath)
+        return;
+    HANDLE h =
+        CreateFileW(apiPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(apiPath);
     if (h == INVALID_HANDLE_VALUE)
         return;
     DWORD w = 0;
@@ -40,12 +61,16 @@ static void writeCfg(const char *body)
 // 统计 config.ini 中某个键出现的次数 (用于迁移幂等性)
 static int countKeyOccurrences(const char *key)
 {
-    wchar_t dir[MAX_PATH], path[MAX_PATH];
-    if (!bl_get_exe_dir(dir, MAX_PATH))
+    wchar_t *path = testCfgPath();
+    if (!path)
         return -1;
-    swprintf(path, MAX_PATH, L"%sconfig.ini", dir);
-    HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+    wchar_t *apiPath = bl_file_api_path(path);
+    free(path);
+    if (!apiPath)
+        return -1;
+    HANDLE h = CreateFileW(apiPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, NULL);
+    free(apiPath);
     if (h == INVALID_HANDLE_VALUE)
         return -1;
     char buf[8192] = {0};
@@ -73,6 +98,91 @@ static int countKeyOccurrences(const char *key)
     return n;
 }
 
+static BOOL createTestDirectory(const wchar_t *path)
+{
+    wchar_t *apiPath = bl_file_api_path(path);
+    if (!apiPath)
+        return FALSE;
+    BOOL ok = CreateDirectoryW(apiPath, NULL);
+    if (!ok && GetLastError() == ERROR_ALREADY_EXISTS)
+        ok = TRUE;
+    free(apiPath);
+    return ok;
+}
+
+// 在没有 longPathAware 清单的测试 exe 中实际读写 >260 字符路径，验证 \\?\ 前缀生效。
+static void testLongPathFileIo(void)
+{
+    wchar_t *dir      = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    wchar_t *filePath = (wchar_t *)malloc(BL_PATH_MAX * sizeof(wchar_t));
+    BOOL ok           = dir && filePath;
+    size_t rootLen    = 0;
+
+    if (ok)
+    {
+        DWORD n = GetTempPathW(BL_PATH_MAX, dir);
+        ok = n > 0 && n < BL_PATH_MAX &&
+             swprintf(dir + n, BL_PATH_MAX - n, L"BlackLockPathTest-%lu", GetCurrentProcessId()) >
+                 0;
+    }
+    if (ok)
+    {
+        rootLen = wcslen(dir);
+        ok      = createTestDirectory(dir);
+    }
+    while (ok && wcslen(dir) < 300)
+    {
+        ok = wcscat_s(dir, BL_PATH_MAX, L"\\segment-0123456789abcdef") == 0 &&
+             createTestDirectory(dir);
+    }
+
+    wchar_t *apiFile = NULL;
+    if (ok)
+    {
+        ok = swprintf(filePath, BL_PATH_MAX, L"%s\\probe.txt", dir) > 0;
+        if (ok)
+            apiFile = bl_file_api_path(filePath);
+        ok = apiFile != NULL;
+    }
+    if (ok)
+    {
+        HANDLE h =
+            CreateFileW(apiFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        ok = h != INVALID_HANDLE_VALUE;
+        if (ok)
+        {
+            static const char data[] = "ok";
+            DWORD wrote             = 0;
+            ok = WriteFile(h, data, sizeof(data) - 1, &wrote, NULL) && wrote == sizeof(data) - 1;
+            CloseHandle(h);
+        }
+        DeleteFileW(apiFile);
+    }
+    free(apiFile);
+
+    if (dir && rootLen > 0)
+    {
+        for (;;)
+        {
+            wchar_t *apiDir = bl_file_api_path(dir);
+            if (apiDir)
+            {
+                RemoveDirectoryW(apiDir);
+                free(apiDir);
+            }
+            if (wcslen(dir) == rootLen)
+                break;
+            wchar_t *slash = wcsrchr(dir, L'\\');
+            if (!slash || (size_t)(slash - dir) < rootLen)
+                break;
+            *slash = 0;
+        }
+    }
+    free(filePath);
+    free(dir);
+    check("path: >260 字符文件实际读写", ok);
+}
+
 int main(void)
 {
     BlConfig c;
@@ -83,6 +193,59 @@ int main(void)
     check("chars: 含空格非法", !bl_password_chars_ok(L"ab cd"));
     check("chars: 含符号非法", !bl_password_chars_ok(L"abc!"));
     check("chars: 中文非法", !bl_password_chars_ok(L"密码"));
+
+    // --- 文件 API 扩展长度路径转换 (不依赖系统 LongPathsEnabled 策略) ---
+    {
+        wchar_t *p = bl_file_api_path(L"C:\\deep\\config.ini");
+        check("path: 盘符绝对路径加扩展前缀",
+              p && wcscmp(p, L"\\\\?\\C:\\deep\\config.ini") == 0);
+        free(p);
+
+        p = bl_file_api_path(L"C:/deep/config.ini");
+        check("path: 扩展路径规范化分隔符",
+              p && wcscmp(p, L"\\\\?\\C:\\deep\\config.ini") == 0);
+        free(p);
+
+        p = bl_file_api_path(L"\\\\server\\share\\config.ini");
+        check("path: UNC 路径转扩展前缀",
+              p && wcscmp(p, L"\\\\?\\UNC\\server\\share\\config.ini") == 0);
+        free(p);
+
+        p = bl_file_api_path(L"\\\\?\\C:\\deep\\config.ini");
+        check("path: 已有扩展前缀保持不变",
+              p && wcscmp(p, L"\\\\?\\C:\\deep\\config.ini") == 0);
+        free(p);
+
+        // 回归 (启动失败 bug): \\?\ 会关闭内核规范化, 故必须先折叠双分隔符再加前缀。
+        // 触发场景: APPDATA 带尾部反斜杠 -> 拼出 "...Roaming\\BlackLock" -> 若不折叠则路径非法、启动即失败。
+        p = bl_file_api_path(L"C:\\a\\\\b\\config.ini");
+        check("path: 折叠重复分隔符 (启动失败回归)",
+              p && wcscmp(p, L"\\\\?\\C:\\a\\b\\config.ini") == 0);
+        free(p);
+
+        // 回归: \\?\ 下 ".." 不再被解析, 必须先规范化。
+        p = bl_file_api_path(L"C:\\a\\b\\..\\c\\config.ini");
+        check("path: 解析 .. 段",
+              p && wcscmp(p, L"\\\\?\\C:\\a\\c\\config.ini") == 0);
+        free(p);
+
+        // 回归: "." 当前段应被移除。
+        p = bl_file_api_path(L"C:\\a\\.\\b\\config.ini");
+        check("path: 解析 . 段",
+              p && wcscmp(p, L"\\\\?\\C:\\a\\b\\config.ini") == 0);
+        free(p);
+
+        // 尾部反斜杠 + 双分隔符组合 (最接近真实 APPDATA bug 的形态)。
+        p = bl_file_api_path(L"C:\\Users\\x\\Roaming\\\\BlackLock");
+        check("path: 尾部/中间双分隔符组合",
+              p && wcscmp(p, L"\\\\?\\C:\\Users\\x\\Roaming\\BlackLock") == 0);
+        free(p);
+
+        // 空/NULL 输入应安全返回 NULL。
+        check("path: NULL 输入返回 NULL", bl_file_api_path(NULL) == NULL);
+        check("path: 空串返回 NULL", bl_file_api_path(L"") == NULL);
+    }
+    testLongPathFileIo();
 
     // --- 有效密码 -> 密码保护生效 ---
     writeCfg("[security]\r\nrequire_password = true\r\npassword = abc123\r\n");
