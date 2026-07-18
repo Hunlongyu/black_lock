@@ -2,6 +2,23 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.4.0] - 2026-07-18
+
+### 新增
+
+- **ARM64 原生构建与发布**：新增 ARM64 架构，Windows on ARM 设备（Surface Pro X 等）可原生运行，不再走 x64 模拟。发布现产出 **x64 / x86 / ARM64** 三个架构。
+- **长路径支持（`\\?\` 扩展路径）**：路径缓冲从 `MAX_PATH`(260) 提升到 32768，所有文件访问经 `bl_file_api_path` 转换为扩展长度形式，突破 260 字符限制且不依赖系统 `LongPathsEnabled` 策略。内嵌 manifest 的 `longPathAware` 声明现已名副其实。主要惠及 `%APPDATA%` 位于深层/重定向目录的用户。
+
+### 修复
+
+- **启动失败回归**：`\\?\` 前缀会关闭内核路径规范化，早期实现直接拼前缀，导致 `%APPDATA%` 带尾部反斜杠时拼出 `...Roaming\\BlackLock` 双分隔符 → 路径非法 → **程序启动即失败**。现改为先经 `GetFullPathNameW` 折叠重复分隔符、解析 `.` / `..` 再加前缀。
+- **开机自启边界误删**：Run 项长度上限误把外层两个引号也算进 `MAX_PATH` 预算，导致 259 字符这类本可启动的路径被误拒、并连带删除已有的 Run 值 → 开机自启被静默移除。改为只校验未加引号的 exe 路径长度。
+- 架构判定改用 `CMAKE_VS_PLATFORM_NAME`：原 `CMAKE_SIZEOF_VOID_P` 会把 ARM64（同为 8 字节）误判成 x64，产物进错目录。
+
+### 测试
+
+- 新增 6 项路径规范化回归断言（折叠 `\\`、解析 `.` / `..`、UNC、NULL/空串），配置层单元测试共 **29 项断言**。CI 三架构（x64/x86/arm64）编译 + ctest + 零依赖校验 + PE 架构校验全绿。
+
 ## [1.3.0] - 2026-07-17
 
 清完代码审查中剩余的全部缺陷，并补上错误可见性与自动化测试。
@@ -111,6 +128,7 @@
 - 纯 C（C17）+ Win32，单文件、零第三方依赖，x64 约 30 KB / x86 约 26 KB
 - MSVC-only CMake 工程 + CMakePresets + GitHub Actions 标签自动发布（x64 & x86）
 
+[1.4.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.4.0
 [1.3.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.3.0
 [1.2.0]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.2.0
 [1.1.2]: https://github.com/Hunlongyu/black_lock/releases/tag/v1.1.2
