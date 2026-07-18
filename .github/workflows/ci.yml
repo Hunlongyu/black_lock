@@ -21,6 +21,8 @@ jobs:
             cmake_arch: x64
           - arch: x86
             cmake_arch: Win32
+          - arch: arm64
+            cmake_arch: ARM64
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,6 +34,8 @@ jobs:
         run: cmake --build build --config MinSizeRel
 
       - name: Test (ctest)
+        # ARM64 产物无法在 x64 runner 上执行, 只做编译校验
+        if: matrix.arch != 'arm64'
         run: ctest --test-dir build -C MinSizeRel --output-on-failure
 
       - name: Verify runtime deps + PE arch
@@ -46,6 +50,6 @@ jobs:
           # 2) 架构正确
           $b = [IO.File]::ReadAllBytes($exe)
           $m = [BitConverter]::ToUInt16($b, [BitConverter]::ToInt32($b, 0x3C) + 4)
-          $want = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0x14C }
+          $want = switch ("${{ matrix.arch }}") { "x64" { 0x8664 } "x86" { 0x14C } "arm64" { 0xAA64 } }
           if ($m -ne $want) { throw "架构不符: 期望 0x$($want.ToString('X4')), 实际 0x$($m.ToString('X4'))" }
           Write-Host "零依赖 + 架构 0x$($m.ToString('X4')) OK"

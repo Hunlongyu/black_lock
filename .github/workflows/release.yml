@@ -22,6 +22,9 @@ jobs:
           - arch: x86
             cmake_arch: Win32
             label: win32
+          - arch: arm64
+            cmake_arch: ARM64
+            label: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -38,7 +41,8 @@ jobs:
         run: cmake --build build --config MinSizeRel
 
       - name: Test (ctest)
-        # 测试不过就不发版
+        # 测试不过就不发版; ARM64 产物无法在 x64 runner 执行, 只做编译校验
+        if: matrix.arch != 'arm64'
         run: ctest --test-dir build -C MinSizeRel --output-on-failure
 
       - name: Verify runtime deps (零依赖)
@@ -59,7 +63,7 @@ jobs:
           $exe = "dist/${{ matrix.arch }}/BlackLock.exe"
           $b = [IO.File]::ReadAllBytes($exe)
           $m = [BitConverter]::ToUInt16($b, [BitConverter]::ToInt32($b, 0x3C) + 4)
-          $want = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0x14C }
+          $want = switch ("${{ matrix.arch }}") { "x64" { 0x8664 } "x86" { 0x14C } "arm64" { 0xAA64 } }
           if ($m -ne $want) { throw "架构不符: 期望 0x$($want.ToString('X4')), 实际 0x$($m.ToString('X4'))" }
           Write-Host "PE Machine 0x$($m.ToString('X4')) OK"
 
@@ -102,6 +106,7 @@ jobs:
             echo '|:---:|:---|:---|'
             echo "| **x64** | [![exe x64](https://img.shields.io/badge/exe-x64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-x64.exe) [![zip x64](https://img.shields.io/badge/zip-x64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-v${VER}-win64.zip) | 64 位 Windows 10/11（推荐） |"
             echo "| **x86** | [![exe x86](https://img.shields.io/badge/exe-x86-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-x86.exe) [![zip x86](https://img.shields.io/badge/zip-x86-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-v${VER}-win32.zip) | 32 位 Windows |"
+            echo "| **ARM64** | [![exe arm64](https://img.shields.io/badge/exe-arm64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-arm64.exe) [![zip arm64](https://img.shields.io/badge/zip-arm64-0078D6?style=flat-square&logo=windows&logoColor=white)](${BASE}/BlackLock-v${VER}-arm64.zip) | ARM 设备（Surface Pro X 等），原生运行 |"
             echo
             echo '`exe` 单文件下载即用；`zip` 内含默认 `config.ini`。默认快捷键 `Alt + L`，默认无需密码（回车或再按一次快捷键即可解锁）。'
             echo

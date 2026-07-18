@@ -78,9 +78,17 @@ add_executable(BlackLock WIN32
 
 target_include_directories(BlackLock PRIVATE src)
 
-# ---- 按架构分目录输出, 避免 x64/x86 互相覆盖 ----
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+# ---- 按架构分目录输出, 避免 x64/x86/arm64 互相覆盖 ----
+# 注意: 不能只看 CMAKE_SIZEOF_VOID_P —— ARM64 同样是 8 字节, 会被误判成 x64。
+# VS 生成器下用 CMAKE_VS_PLATFORM_NAME (x64 / Win32 / ARM64) 判定。
+if(CMAKE_VS_PLATFORM_NAME STREQUAL "ARM64")
+    set(BL_ARCH "arm64")
+elseif(CMAKE_VS_PLATFORM_NAME STREQUAL "Win32")
+    set(BL_ARCH "x86")
+elseif(CMAKE_VS_PLATFORM_NAME STREQUAL "x64")
     set(BL_ARCH "x64")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(BL_ARCH "x64") # 非 VS 生成器的兜底
 else()
     set(BL_ARCH "x86")
 endif()

@@ -17,6 +17,14 @@
       "generator": "Visual Studio 18 2026",
       "architecture": "Win32",
       "binaryDir": "${sourceDir}/build-x86"
+    },
+    {
+      "name": "msvc-arm64",
+      "displayName": "MSVC (Visual Studio 18 2026, ARM64)",
+      "description": "MSVC / ARM64 原生 (需安装 VS 的 ARM64 生成工具; 输出到 dist/arm64)",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "ARM64",
+      "binaryDir": "${sourceDir}/build-arm64"
     }
   ],
   "buildPresets": [
@@ -42,6 +50,12 @@
       "name": "msvc-x86-minsize",
       "displayName": "MSVC x86 MinSizeRel",
       "configurePreset": "msvc-x86",
+      "configuration": "MinSizeRel"
+    },
+    {
+      "name": "msvc-arm64-minsize",
+      "displayName": "MSVC ARM64 MinSizeRel",
+      "configurePreset": "msvc-arm64",
       "configuration": "MinSizeRel"
     }
   ]
