@@ -8,9 +8,9 @@
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20(x64%20%C2%B7%20x86)-0078D6)
 ![language](https://img.shields.io/badge/language-C17-00599C)
-![build](https://img.shields.io/badge/build-MSVC-8250DF)
 ![size](https://img.shields.io/badge/size-~170%20KB-brightgreen)
 ![deps](https://img.shields.io/badge/runtime%20deps-0-success)
+![downloads](https://img.shields.io/github/downloads/Hunlongyu/black_lock/total)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
